@@ -9,6 +9,7 @@ import {
   Chip,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
@@ -30,7 +31,12 @@ import {
   isCreatedTodayJerusalem,
   jobStatusChipColors,
 } from '../lib/caliberUi'
-import { approveJobExclusion, getJobs, type Job } from '../api/csApi'
+import {
+  approveJobExclusion,
+  broadcastInquiryByDomainAndCity,
+  getJobs,
+  type Job,
+} from '../api/csApi'
 
 type JobsTab = 'today' | 'exceptions' | 'search'
 
@@ -50,6 +56,25 @@ function isPendingExclusion(exclusionReason: string | undefined | null): boolean
   const e = String(exclusionReason || '').trim()
   if (!e || e === 'ללא החרגות') return false
   return !e.startsWith('מאושר החרגה')
+}
+
+/** תבנית ברירת־מחדל מהוובהוק: `… תחום: X. עיר: Y.` */
+function parseDomainCityFromDescription(description: string | undefined | null): {
+  domain: string
+  city: string
+} | null {
+  const s = String(description || '').trim()
+  const m = s.match(/תחום:\s*([^.]+?)\s*\.\s*עיר:\s*([^.]+?)\s*\./u)
+  if (!m) return null
+  const domain = m[1].replace(/\s+/g, ' ').trim()
+  const city = m[2].replace(/\s+/g, ' ').trim()
+  if (!domain || !city) return null
+  return { domain, city }
+}
+
+function showBroadcastToAccountsButton(job: Job, tab: JobsTab): boolean {
+  if (tab !== 'today' && tab !== 'search') return false
+  return !String(job.leadDomain || '').trim()
 }
 
 function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
@@ -76,6 +101,13 @@ export default function JobsPage() {
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<Job | null>(null)
   const [approvingId, setApprovingId] = useState<number | null>(null)
+  const [broadcastDraft, setBroadcastDraft] = useState<{
+    job: Job
+    domain: string
+    city: string
+  } | null>(null)
+  const [broadcastingId, setBroadcastingId] = useState<number | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const s = String(segment || '').trim()
@@ -114,6 +146,42 @@ export default function JobsPage() {
     },
     [load],
   )
+
+  const openBroadcastDialog = useCallback((job: Job) => {
+    const parsed = parseDomainCityFromDescription(job.description)
+    const domain = parsed?.domain || String(job.specialtiesCategory || '').trim()
+    const city = parsed?.city || ''
+    setBroadcastDraft({ job, domain, city })
+  }, [])
+
+  const submitBroadcast = useCallback(async () => {
+    if (!broadcastDraft) return
+    const { job, domain, city } = broadcastDraft
+    const d = domain.trim()
+    const c = city.trim()
+    if (!d || !c) return
+    setBroadcastingId(job.id)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const res = await broadcastInquiryByDomainAndCity({
+        domain: d,
+        city: c,
+        description: String(job.description || '').trim() || undefined,
+      })
+      setBroadcastDraft(null)
+      await load({ silent: true })
+      setSuccessMessage(
+        res.createdJobs > 0
+          ? `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
+          : 'לא נמצאו בעלי מקצוע תואמים לתחום ולעיר.',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בשליחת הפניות')
+    } finally {
+      setBroadcastingId(null)
+    }
+  }, [broadcastDraft, load])
 
   useEffect(() => {
     void load()
@@ -193,6 +261,11 @@ export default function JobsPage() {
               </Button>
             </Stack>
 
+            {successMessage ? (
+              <Alert severity="success" onClose={() => setSuccessMessage(null)}>
+                {successMessage}
+              </Alert>
+            ) : null}
             {error ? <Alert severity="error">{error}</Alert> : null}
 
             {loading ? (
@@ -217,11 +290,9 @@ export default function JobsPage() {
                         <TableCell sx={{ fontWeight: 800 }}>סטטוס</TableCell>
                         <TableCell sx={{ fontWeight: 800 }}>החרגות</TableCell>
                         <TableCell sx={{ fontWeight: 800 }}>נוצר</TableCell>
-                        {tab === 'exceptions' ? (
-                          <TableCell align="center" sx={{ fontWeight: 800, minWidth: 120 }}>
-                            פעולה
-                          </TableCell>
-                        ) : null}
+                        <TableCell align="center" sx={{ fontWeight: 800, minWidth: 130 }}>
+                          פעולה
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -254,8 +325,8 @@ export default function JobsPage() {
                             {row.exclusionReason || '—'}
                           </TableCell>
                           <TableCell>{row.created}</TableCell>
-                          {tab === 'exceptions' ? (
-                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                          <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                            {tab === 'exceptions' ? (
                               <Button
                                 size="small"
                                 variant="contained"
@@ -265,13 +336,26 @@ export default function JobsPage() {
                               >
                                 {approvingId === row.id ? <CircularProgress size={18} color="inherit" /> : 'אישור'}
                               </Button>
-                            </TableCell>
-                          ) : null}
+                            ) : showBroadcastToAccountsButton(row, tab) ? (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={broadcastingId === row.id}
+                                onClick={() => openBroadcastDialog(row)}
+                              >
+                                יצירת פניות
+                              </Button>
+                            ) : (
+                              <Typography variant="caption" color="text.disabled">
+                                —
+                              </Typography>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                       {filtered.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={tab === 'exceptions' ? 9 : 8} align="center" sx={{ py: 6 }}>
+                          <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
                             אין נתונים להצגה
                           </TableCell>
                         </TableRow>
@@ -299,6 +383,11 @@ export default function JobsPage() {
               <Typography><strong>טלפון:</strong> {formatCsPhoneDisplay(detail.phoneNumber)}</Typography>
               <Typography><strong>עסק:</strong> {detail.businessName}</Typography>
               <Typography><strong>תחום:</strong> {detail.specialtiesCategory}</Typography>
+              {detail.leadDomain ? (
+                <Typography variant="body2" color="text.secondary">
+                  נשלח לרלוונטים (תחום לחיוב): {detail.leadDomain}
+                </Typography>
+              ) : null}
               <Typography><strong>סטטוס:</strong> {detail.statusLabel}</Typography>
               <Typography><strong>החרגות:</strong> {detail.exclusionReason || '—'}</Typography>
               <Typography><strong>תיאור:</strong> {detail.description}</Typography>
@@ -308,6 +397,65 @@ export default function JobsPage() {
             </Stack>
           ) : null}
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!broadcastDraft}
+        onClose={() => {
+          if (broadcastingId != null) return
+          setBroadcastDraft(null)
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>יצירת פניות לרלוונטים</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              לפי התחום והעיר נוצרות פניות לכל בעלי המקצוע התואמים (אותו תהליך כמו הוובהוק). אפשר לערוך את
+              הערכים לפני השליחה.
+            </Typography>
+            <TextField
+              label="תחום"
+              fullWidth
+              size="small"
+              value={broadcastDraft?.domain ?? ''}
+              onChange={(e) =>
+                setBroadcastDraft((prev) =>
+                  prev ? { ...prev, domain: e.target.value } : prev,
+                )
+              }
+            />
+            <TextField
+              label="עיר"
+              fullWidth
+              size="small"
+              value={broadcastDraft?.city ?? ''}
+              onChange={(e) =>
+                setBroadcastDraft((prev) =>
+                  prev ? { ...prev, city: e.target.value } : prev,
+                )
+              }
+              helperText="אם התיאור בפורמט «תחום: …. עיר: ….» — השדות ימולאו אוטומטית"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setBroadcastDraft(null)} disabled={broadcastingId != null}>
+            ביטול
+          </Button>
+          <Button
+            variant="contained"
+            disabled={
+              broadcastingId != null ||
+              !String(broadcastDraft?.domain || '').trim() ||
+              !String(broadcastDraft?.city || '').trim()
+            }
+            onClick={() => void submitBroadcast()}
+          >
+            {broadcastingId != null ? <CircularProgress size={22} color="inherit" /> : 'שליחה'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   )

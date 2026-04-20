@@ -15,6 +15,8 @@ export type Job = {
   phoneNumber: string
   businessName: string
   specialtiesCategory: string
+  /** מולא אחרי שליחת וובהוק התאמה לרלוונטים — ריק אם הפנייה לא נוצרה דרך התהליך הזה */
+  leadDomain: string
   description: string
   status: string
   statusLabel: string
@@ -229,6 +231,26 @@ export async function approveJobExclusion(jobId: number) {
   return csFetch<Job>(`/customer-service/jobs/${jobId}/approve-exclusion`, {
     method: 'POST',
   })
+}
+
+/** וובהוק ציבורי: יוצר פניות לכל ה־accounts שמתאימים לתחום ולעיר */
+export async function broadcastInquiryByDomainAndCity(body: {
+  domain: string
+  city: string
+  description?: string
+}) {
+  return csFetch<{ matchedAccounts: number; createdJobs: number; jobIds: number[] }>(
+    '/jobs/webhook/create-job',
+    {
+      method: 'POST',
+      body: {
+        domain: body.domain.trim(),
+        city: body.city.trim(),
+        ...(body.description?.trim() ? { description: body.description.trim() } : {}),
+      },
+      noAuth: true,
+    },
+  )
 }
 
 export async function getJobsToday() {
