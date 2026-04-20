@@ -224,20 +224,130 @@ export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
 }
 
+/** אישור החרגה: הפנייה עוברת ל«נדחה», סיבת ההחרגה ל«מאושר החרגה - …», והחזרת קרדיטים לבעל המקצוע כשנוכו בעת אישור הפנייה */
+export async function approveJobExclusion(jobId: number) {
+  return csFetch<Job>(`/customer-service/jobs/${jobId}/approve-exclusion`, {
+    method: 'POST',
+  })
+}
+
+export async function getJobsToday() {
+  const params = new URLSearchParams()
+  params.set('created', 'today')
+  return csFetch<Job[]>(`/customer-service/jobs?${params.toString()}`)
+}
+
 export async function getAccounts() {
   return csFetch<Account[]>('/customer-service/accounts')
 }
 
-export async function getLeads() {
+export async function getLeads(created?: 'today') {
+  if (created === 'today') {
+    const params = new URLSearchParams()
+    params.set('created', 'today')
+    return csFetch<Lead[]>(`/customer-service/leads?${params.toString()}`)
+  }
   return csFetch<Lead[]>('/customer-service/leads')
 }
 
-export async function getTickets() {
-  return csFetch<Ticket[]>('/customer-service/tickets')
+export type LeadInput = Partial<{
+  name: string
+  businessName: string
+  phone: string
+  email: string | null
+  category: string | null
+  isPaid: boolean
+  amount: number | null
+  bonus: number | null
+  responsible: string | null
+  followUpDate: string | null
+  details: string | null
+  status: string | null
+  leadSource: string | null
+  timeToCall: string | null
+  linkId: string | null
+  linkUrl: string | null
+}>
+
+export async function createLead(body: LeadInput) {
+  return csFetch<Lead>('/customer-service/leads', { method: 'POST', body })
+}
+
+export async function patchLead(id: number, body: LeadInput) {
+  return csFetch<Lead>(`/customer-service/leads/${id}`, { method: 'PATCH', body })
+}
+
+export async function deleteLead(id: number) {
+  return csFetch<{ ok: boolean; id: number }>(`/customer-service/leads/${id}`, { method: 'DELETE' })
+}
+
+export type TicketQuery = {
+  status?: string
+  issueType?: string
+  responsible?: string
+  followUpDate?: string
+}
+
+export async function getTickets(query?: TicketQuery) {
+  const params = new URLSearchParams()
+  if (query?.status) params.set('status', query.status)
+  if (query?.issueType) params.set('issueType', query.issueType)
+  if (query?.responsible) params.set('responsible', query.responsible)
+  if (query?.followUpDate) params.set('followUpDate', query.followUpDate)
+  const qs = params.toString()
+  return csFetch<Ticket[]>(qs ? `/customer-service/tickets?${qs}` : '/customer-service/tickets')
+}
+
+export type TicketInput = {
+  name?: string | null
+  phoneNumber?: string | null
+  details?: string | null
+  issueType?: string | null
+  status?: string | null
+  responsible?: string | null
+  followUpDate?: string | null
+  notes?: string | null
+}
+
+export async function createTicket(body: TicketInput) {
+  return csFetch<Ticket>('/customer-service/tickets', { method: 'POST', body })
+}
+
+export async function patchTicket(id: number, body: TicketInput) {
+  return csFetch<Ticket>(`/customer-service/tickets/${id}`, { method: 'PATCH', body })
+}
+
+export async function deleteTicket(id: number) {
+  return csFetch<{ ok: boolean; id: number }>(`/customer-service/tickets/${id}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function getTasks() {
   return csFetch<Task[]>('/customer-service/tasks')
+}
+
+export type TaskInput = Partial<{
+  task_name: string
+  description: string | null
+  responsible: string | null
+  status: string | null
+  project_name: string | null
+  sprint_number: string | null
+  execution_date: string | null
+  file_urls: string | null
+}>
+
+export async function createTask(body: TaskInput) {
+  return csFetch<Task>('/customer-service/tasks', { method: 'POST', body })
+}
+
+export async function putTask(id: number, body: TaskInput) {
+  return csFetch<Task>(`/customer-service/tasks/${id}`, { method: 'PUT', body })
+}
+
+export async function deleteTask(id: number) {
+  return csFetch<void>(`/customer-service/tasks/${id}`, { method: 'DELETE' })
 }
 
 export async function getCities() {

@@ -69,16 +69,19 @@ export default function App() {
                 </ProtectedRoute>
               )}
             >
-              <Route path="/" element={<Navigate to="/jobs" replace />} />
-              <Route path="/jobs" element={<JobsPage />} />
-              <Route path="/accounts" element={<AccountsPage />} />
+              <Route path="/" element={<Navigate to="/jobs/today" replace />} />
+              <Route path="/jobs" element={<Navigate to="/jobs/today" replace />} />
+              <Route path="/jobs/:segment" element={<JobsPage />} />
+              <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
+              <Route path="/accounts/:segment" element={<AccountsPage />} />
               <Route path="/leads" element={<LeadsPage />} />
               <Route path="/tickets" element={<TicketsPage />} />
-              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
+              <Route path="/tasks/:tabSlug" element={<TasksPage />} />
               <Route path="/cities" element={<CitiesPage />} />
               <Route path="/commissions" element={<CommissionsPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/jobs/today" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

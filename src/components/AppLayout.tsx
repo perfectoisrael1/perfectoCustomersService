@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AppBar,
   Box,
@@ -18,20 +18,21 @@ import { useAuth } from '../context/useAuth'
 
 const drawerWidth = 260
 
-const links: { to: string; label: string }[] = [
-  { to: '/jobs', label: 'פניות' },
-  { to: '/accounts', label: 'לקוחות' },
-  { to: '/leads', label: 'לידים' },
-  { to: '/tickets', label: 'שירות לקוחות' },
-  { to: '/tasks', label: 'משימות' },
-  { to: '/cities', label: 'אזורים וערים' },
-  { to: '/commissions', label: 'מחירון עמלות' },
+const links: { to: string; prefix: string; label: string }[] = [
+  { to: '/jobs/today', prefix: '/jobs', label: 'פניות' },
+  { to: '/accounts/businesses', prefix: '/accounts', label: 'לקוחות' },
+  { to: '/leads', prefix: '/leads', label: 'לידים' },
+  { to: '/tickets', prefix: '/tickets', label: 'שירות לקוחות' },
+  { to: '/tasks/my-tasks', prefix: '/tasks', label: 'משימות' },
+  { to: '/cities', prefix: '/cities', label: 'אזורים וערים' },
+  { to: '/commissions', prefix: '/commissions', label: 'מחירון עמלות' },
 ]
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const drawer = (
     <Box sx={{ textAlign: 'right', direction: 'rtl' }}>
@@ -45,26 +46,33 @@ export default function AppLayout() {
       </Toolbar>
       <Divider />
       <List>
-        {links.map((l) => (
-          <ListItemButton
-            key={l.to}
-            component={NavLink}
-            to={l.to}
-            onClick={() => setMobileOpen(false)}
-            sx={{
-              '&.active': {
-                bgcolor: 'rgba(0,0,0,0.06)',
-                borderLeft: '4px solid',
-                borderColor: 'primary.main',
-              },
-            }}
-          >
-            <ListItemText
-              primary={l.label}
-              slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right' } } }}
-            />
-          </ListItemButton>
-        ))}
+        {links.map((l) => {
+          const selected =
+            location.pathname === l.prefix || location.pathname.startsWith(`${l.prefix}/`)
+          return (
+            <ListItemButton
+              key={l.prefix}
+              component={RouterLink}
+              to={l.to}
+              selected={selected}
+              onClick={() => setMobileOpen(false)}
+              sx={{
+                ...(selected
+                  ? {
+                    bgcolor: 'rgba(0,0,0,0.06)',
+                    borderLeft: '4px solid',
+                    borderColor: 'primary.main',
+                  }
+                  : {}),
+              }}
+            >
+              <ListItemText
+                primary={l.label}
+                slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right' } } }}
+              />
+            </ListItemButton>
+          )
+        })}
       </List>
     </Box>
   )
