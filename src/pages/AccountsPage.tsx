@@ -59,7 +59,7 @@ export default function AccountsPage() {
     try {
       setRows(await getAccounts())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה בטעינת לקוחות')
+      setError(err instanceof Error ? err.message : 'שגיאה בטעינת ספקים')
     } finally {
       setLoading(false)
     }
@@ -108,7 +108,7 @@ export default function AccountsPage() {
         <CardContent>
           <Stack spacing={2}>
             <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              לקוחות
+              ספקים
             </Typography>
 
             <Tabs
@@ -119,7 +119,7 @@ export default function AccountsPage() {
               }}
               sx={{ borderBottom: 1, borderColor: 'divider' }}
             >
-              <Tab value="customers" label={`כל הלקוחות (${counts.customers})`} />
+              <Tab value="customers" label={`כל הספקים (${counts.customers})`} />
               <Tab value="today" label={`הצטרפויות היום (${counts.today})`} />
             </Tabs>
 

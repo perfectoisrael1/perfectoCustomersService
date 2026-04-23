@@ -20,7 +20,7 @@ const drawerWidth = 260
 
 const links: { to: string; prefix: string; label: string }[] = [
   { to: '/jobs/today', prefix: '/jobs', label: 'פניות' },
-  { to: '/accounts/businesses', prefix: '/accounts', label: 'לקוחות' },
+  { to: '/accounts/businesses', prefix: '/accounts', label: 'ספקים' },
   { to: '/leads', prefix: '/leads', label: 'לידים' },
   { to: '/tickets', prefix: '/tickets', label: 'שירות לקוחות' },
   { to: '/tasks/my-tasks', prefix: '/tasks', label: 'משימות' },

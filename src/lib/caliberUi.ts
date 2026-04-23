@@ -102,7 +102,6 @@ const JOBS_NEUTRAL = '#C4C4C4'
 export const JOB_STATUS_CHIP_COLORS: Record<string, { bg: string; fg: string }> = {
   חדשה: { bg: JOBS_NEUTRAL, fg: '#fff' },
   'פנייה חדשה': { bg: JOBS_NEUTRAL, fg: '#fff' },
-  'פנייה חדשה (התאמה)': { bg: JOBS_NEUTRAL, fg: '#fff' },
   'ממתין ללקוח': { bg: '#FDB85A', fg: '#fff' },
   'הצעת מחיר': { bg: '#2691C0', fg: '#fff' },
   'בהצעת מחיר': { bg: '#2691C0', fg: '#fff' },
@@ -115,6 +114,7 @@ export const JOB_STATUS_CHIP_COLORS: Record<string, { bg: string; fg: string }> 
   'נסגר אוטומטית': { bg: '#00C875', fg: '#fff' },
   'בוטל לבקשת לקוח': { bg: '#DF2F4A', fg: '#fff' },
   'לא ידוע': { bg: '#9E9E9E', fg: '#fff' },
+  נתפס: { bg: '#B0BEC5', fg: '#fff' },
 }
 
 export function jobStatusChipColors(statusLabel: string | null | undefined) {

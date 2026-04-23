@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'reac
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -25,6 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { createFilterOptions } from '@mui/material/Autocomplete'
 import CloseIcon from '@mui/icons-material/Close'
 import {
   formatCsPhoneDisplay,
@@ -34,13 +36,18 @@ import {
 import {
   approveJobExclusion,
   broadcastInquiryByDomainAndCity,
+  getCities,
   getJobs,
+  getServices,
+  rejectJobExclusion,
+  type City,
   type Job,
+  type Service,
 } from '../api/csApi'
 
-type JobsTab = 'today' | 'exceptions' | 'search'
+type JobsTab = 'today' | 'exceptions' | 'search' | 'leave'
 
-const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'search']
+const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'search', 'leave']
 
 function segmentToTab(segment: string | undefined): JobsTab {
   const s = String(segment || '').trim()
@@ -77,6 +84,36 @@ function showBroadcastToAccountsButton(job: Job, tab: JobsTab): boolean {
   return !String(job.leadDomain || '').trim()
 }
 
+const filterAutocompleteOptions = createFilterOptions<string>({
+  limit: 80,
+  ignoreCase: true,
+  stringify: (option) => option,
+})
+
+function buildDomainOptions(services: Service[]): string[] {
+  const set = new Set<string>()
+  for (const s of services) {
+    const cat = String(s.category || '').trim()
+    const svc = String(s.service || '').trim()
+    if (cat) set.add(cat)
+    if (svc) set.add(svc)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
+}
+
+function buildCityOptions(cities: City[]): string[] {
+  const set = new Set<string>()
+  for (const c of cities) {
+    const name = String(c.city || '').trim()
+    if (name) set.add(name)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
+}
+
+const autocompleteTextFieldSx = {
+  '& .MuiInputBase-input': { textAlign: 'right', direction: 'rtl' as const },
+}
+
 function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
   if (tab === 'today') return all.filter((r) => isCreatedTodayJerusalem(r.created))
   if (tab === 'exceptions') {
@@ -100,7 +137,7 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<Job | null>(null)
-  const [approvingId, setApprovingId] = useState<number | null>(null)
+  const [exceptionsBusyJobId, setExceptionsBusyJobId] = useState<number | null>(null)
   const [broadcastDraft, setBroadcastDraft] = useState<{
     job: Job
     domain: string
@@ -108,6 +145,52 @@ export default function JobsPage() {
   } | null>(null)
   const [broadcastingId, setBroadcastingId] = useState<number | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const [leaveDomain, setLeaveDomain] = useState('')
+  const [leaveCity, setLeaveCity] = useState('')
+  const [leavePhone, setLeavePhone] = useState('')
+  const [leaveCustomerName, setLeaveCustomerName] = useState('')
+  const [leaveDescription, setLeaveDescription] = useState('')
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false)
+
+  const [catalogServices, setCatalogServices] = useState<Service[]>([])
+  const [catalogCities, setCatalogCities] = useState<City[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setCatalogLoading(true)
+      setCatalogError(null)
+      try {
+        const [svc, cty] = await Promise.all([getServices(), getCities()])
+        if (cancelled) return
+        setCatalogServices(Array.isArray(svc) ? svc : [])
+        setCatalogCities(Array.isArray(cty) ? cty : [])
+      } catch (err) {
+        if (!cancelled) {
+          setCatalogError(
+            err instanceof Error ? err.message : 'שגיאה בטעינת רשימות תחום/עיר',
+          )
+        }
+      } finally {
+        if (!cancelled) setCatalogLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const domainOptions = useMemo(
+    () => buildDomainOptions(catalogServices),
+    [catalogServices],
+  )
+  const cityOptions = useMemo(
+    () => buildCityOptions(catalogCities),
+    [catalogCities],
+  )
 
   useEffect(() => {
     const s = String(segment || '').trim()
@@ -132,7 +215,7 @@ export default function JobsPage() {
   const onApproveExclusion = useCallback(
     async (job: Job, e: MouseEvent) => {
       e.stopPropagation()
-      setApprovingId(job.id)
+      setExceptionsBusyJobId(job.id)
       setError(null)
       try {
         await approveJobExclusion(job.id)
@@ -141,7 +224,25 @@ export default function JobsPage() {
       } catch (err) {
         setError(err instanceof Error ? err.message : 'שגיאה באישור ההחרגה')
       } finally {
-        setApprovingId(null)
+        setExceptionsBusyJobId(null)
+      }
+    },
+    [load],
+  )
+
+  const onRejectExclusion = useCallback(
+    async (job: Job, e: MouseEvent) => {
+      e.stopPropagation()
+      setExceptionsBusyJobId(job.id)
+      setError(null)
+      try {
+        await rejectJobExclusion(job.id)
+        await load({ silent: true })
+        setDetail((d) => (d?.id === job.id ? null : d))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'שגיאה בדחיית ההחרגה')
+      } finally {
+        setExceptionsBusyJobId(null)
       }
     },
     [load],
@@ -182,6 +283,41 @@ export default function JobsPage() {
       setBroadcastingId(null)
     }
   }, [broadcastDraft, load])
+
+  const submitLeaveInquiry = useCallback(async () => {
+    const d = leaveDomain.trim()
+    const c = leaveCity.trim()
+    if (!d || !c) return
+    setLeaveSubmitting(true)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const res = await broadcastInquiryByDomainAndCity({
+        domain: d,
+        city: c,
+        description: leaveDescription.trim() || undefined,
+        phone: leavePhone.trim() || undefined,
+        customerName: leaveCustomerName.trim() || undefined,
+      })
+      setSuccessMessage(
+        res.createdJobs > 0
+          ? `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
+          : 'לא נמצאו בעלי מקצוע תואמים לתחום ולעיר.',
+      )
+      void load({ silent: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה ביצירת הפניות')
+    } finally {
+      setLeaveSubmitting(false)
+    }
+  }, [
+    leaveCity,
+    leaveCustomerName,
+    leaveDescription,
+    leaveDomain,
+    leavePhone,
+    load,
+  ])
 
   useEffect(() => {
     void load()
@@ -242,24 +378,27 @@ export default function JobsPage() {
               <Tab value="today" label={`פניות היום (${counts.today})`} />
               <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
               <Tab value="search" label={`כל הפניות (${counts.search})`} />
+              <Tab value="leave" label="השארת פנייה" />
             </Tabs>
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
-            >
-              <TextField
-                size="small"
-                placeholder="חיפוש לפי לקוח, טלפון, תוכן, סטטוס…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                sx={{ flex: 1, minWidth: 200 }}
-              />
-              <Button variant="contained" onClick={() => void load()}>
-                רענון
-              </Button>
-            </Stack>
+            {tab === 'leave' ? null : (
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
+              >
+                <TextField
+                  size="small"
+                  placeholder="חיפוש לפי לקוח, טלפון, תוכן, סטטוס…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  sx={{ flex: 1, minWidth: 200 }}
+                />
+                <Button variant="contained" onClick={() => void load()}>
+                  רענון
+                </Button>
+              </Stack>
+            )}
 
             {successMessage ? (
               <Alert severity="success" onClose={() => setSuccessMessage(null)}>
@@ -268,7 +407,107 @@ export default function JobsPage() {
             ) : null}
             {error ? <Alert severity="error">{error}</Alert> : null}
 
-            {loading ? (
+            {tab === 'leave' ? (
+              <Stack spacing={2} sx={{ pt: 0.5, maxWidth: 560 }}>
+                <Typography variant="body2" color="text.secondary">
+                  מילוי תחום ועיר חובה. שאר השדות אופציונליים — יתווספו לתיאור הפנייה שנשלח לבעלי המקצוע
+                  הרלוונטיים (אותו מנגנון כמו וובהוק יצירת פניות). אפשר לבחור מהרשימה או להקליד ערך חופשי.
+                </Typography>
+                {catalogLoading ? (
+                  <Typography variant="caption" color="text.secondary">
+                    טוען רשימות תחומים וערים מהמערכת…
+                  </Typography>
+                ) : null}
+                {catalogError ? (
+                  <Alert severity="warning" sx={{ py: 0.5 }}>
+                    {catalogError} — ניתן עדיין להקליד תחום ועיר ידנית.
+                  </Alert>
+                ) : null}
+                <Autocomplete
+                  fullWidth
+                  freeSolo
+                  options={domainOptions}
+                  value={leaveDomain}
+                  onChange={(_e, v) => setLeaveDomain(typeof v === 'string' ? v : '')}
+                  inputValue={leaveDomain}
+                  onInputChange={(_e, v) => setLeaveDomain(v)}
+                  filterOptions={filterAutocompleteOptions}
+                  slotProps={{ listbox: { style: { maxHeight: 280 } } }}
+                  noOptionsText="אין התאמות — אפשר להמשיך להקליד"
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="תחום"
+                      required
+                      size="small"
+                      sx={autocompleteTextFieldSx}
+                    />
+                  )}
+                />
+                <Autocomplete
+                  fullWidth
+                  freeSolo
+                  options={cityOptions}
+                  value={leaveCity}
+                  onChange={(_e, v) => setLeaveCity(typeof v === 'string' ? v : '')}
+                  inputValue={leaveCity}
+                  onInputChange={(_e, v) => setLeaveCity(v)}
+                  filterOptions={filterAutocompleteOptions}
+                  slotProps={{ listbox: { style: { maxHeight: 280 } } }}
+                  noOptionsText="אין התאמות — אפשר להמשיך להקליד"
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="עיר"
+                      required
+                      size="small"
+                      sx={autocompleteTextFieldSx}
+                    />
+                  )}
+                />
+                <TextField
+                  label="טלפון לקוח"
+                  type="tel"
+                  fullWidth
+                  size="small"
+                  value={leavePhone}
+                  onChange={(e) => setLeavePhone(e.target.value)}
+                />
+                <TextField
+                  label="שם לקוח"
+                  fullWidth
+                  size="small"
+                  value={leaveCustomerName}
+                  onChange={(e) => setLeaveCustomerName(e.target.value)}
+                />
+                <TextField
+                  label="תיאור / הערות"
+                  fullWidth
+                  size="small"
+                  multiline
+                  minRows={3}
+                  value={leaveDescription}
+                  onChange={(e) => setLeaveDescription(e.target.value)}
+                />
+                <Box>
+                  <Button
+                    variant="contained"
+                    disabled={
+                      leaveSubmitting ||
+                      !leaveDomain.trim() ||
+                      !leaveCity.trim()
+                    }
+                    onClick={() => void submitLeaveInquiry()}
+                  >
+                    {leaveSubmitting ? (
+                      <CircularProgress size={22} color="inherit" />
+                    ) : (
+                      'יצירה'
+                    )}
+                  </Button>
+                </Box>
+              </Stack>
+            ) : loading ? (
               <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
                 <CircularProgress color="primary" />
               </Box>
@@ -290,7 +529,7 @@ export default function JobsPage() {
                         <TableCell sx={{ fontWeight: 800 }}>סטטוס</TableCell>
                         <TableCell sx={{ fontWeight: 800 }}>החרגות</TableCell>
                         <TableCell sx={{ fontWeight: 800 }}>נוצר</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 800, minWidth: 130 }}>
+                        <TableCell align="center" sx={{ fontWeight: 800, minWidth: 200 }}>
                           פעולה
                         </TableCell>
                       </TableRow>
@@ -327,15 +566,38 @@ export default function JobsPage() {
                           <TableCell>{row.created}</TableCell>
                           <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                             {tab === 'exceptions' ? (
-                              <Button
-                                size="small"
-                                variant="contained"
-                                color="success"
-                                disabled={approvingId === row.id}
-                                onClick={(e) => void onApproveExclusion(row, e)}
+                              <Stack
+                                direction="row"
+                                spacing={0.75}
+                                sx={{
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                }}
                               >
-                                {approvingId === row.id ? <CircularProgress size={18} color="inherit" /> : 'אישור'}
-                              </Button>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  disabled={exceptionsBusyJobId === row.id}
+                                  onClick={(e) => void onApproveExclusion(row, e)}
+                                >
+                                  {exceptionsBusyJobId === row.id ? (
+                                    <CircularProgress size={18} color="inherit" />
+                                  ) : (
+                                    'אישור'
+                                  )}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  disabled={exceptionsBusyJobId === row.id}
+                                  onClick={(e) => void onRejectExclusion(row, e)}
+                                >
+                                  לא מאשר
+                                </Button>
+                              </Stack>
                             ) : showBroadcastToAccountsButton(row, tab) ? (
                               <Button
                                 size="small"
@@ -415,28 +677,62 @@ export default function JobsPage() {
               לפי התחום והעיר נוצרות פניות לכל בעלי המקצוע התואמים (אותו תהליך כמו הוובהוק). אפשר לערוך את
               הערכים לפני השליחה.
             </Typography>
-            <TextField
-              label="תחום"
+            <Autocomplete
               fullWidth
-              size="small"
+              freeSolo
+              options={domainOptions}
               value={broadcastDraft?.domain ?? ''}
-              onChange={(e) =>
+              onChange={(_e, v) =>
                 setBroadcastDraft((prev) =>
-                  prev ? { ...prev, domain: e.target.value } : prev,
+                  prev ? { ...prev, domain: typeof v === 'string' ? v : '' } : prev,
                 )
               }
+              inputValue={broadcastDraft?.domain ?? ''}
+              onInputChange={(_e, v) =>
+                setBroadcastDraft((prev) =>
+                  prev ? { ...prev, domain: v } : prev,
+                )
+              }
+              filterOptions={filterAutocompleteOptions}
+              slotProps={{ listbox: { style: { maxHeight: 280 } } }}
+              noOptionsText="אין התאמות — אפשר להמשיך להקליד"
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="תחום"
+                  size="small"
+                  sx={autocompleteTextFieldSx}
+                />
+              )}
             />
-            <TextField
-              label="עיר"
+            <Autocomplete
               fullWidth
-              size="small"
+              freeSolo
+              options={cityOptions}
               value={broadcastDraft?.city ?? ''}
-              onChange={(e) =>
+              onChange={(_e, v) =>
                 setBroadcastDraft((prev) =>
-                  prev ? { ...prev, city: e.target.value } : prev,
+                  prev ? { ...prev, city: typeof v === 'string' ? v : '' } : prev,
                 )
               }
-              helperText="אם התיאור בפורמט «תחום: …. עיר: ….» — השדות ימולאו אוטומטית"
+              inputValue={broadcastDraft?.city ?? ''}
+              onInputChange={(_e, v) =>
+                setBroadcastDraft((prev) =>
+                  prev ? { ...prev, city: v } : prev,
+                )
+              }
+              filterOptions={filterAutocompleteOptions}
+              slotProps={{ listbox: { style: { maxHeight: 280 } } }}
+              noOptionsText="אין התאמות — אפשר להמשיך להקליד"
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="עיר"
+                  size="small"
+                  sx={autocompleteTextFieldSx}
+                  helperText="אם התיאור בפורמט «תחום: …. עיר: ….» — השדות ימולאו אוטומטית"
+                />
+              )}
             />
           </Stack>
         </DialogContent>

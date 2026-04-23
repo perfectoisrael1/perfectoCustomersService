@@ -233,21 +233,37 @@ export async function approveJobExclusion(jobId: number) {
   })
 }
 
+/** דחיית החרגה: הפנייה חוזרת ל«ללא החרגות» (ללא שינוי סטטוס) */
+export async function rejectJobExclusion(jobId: number) {
+  return csFetch<Job>(`/customer-service/jobs/${jobId}/reject-exclusion`, {
+    method: 'POST',
+  })
+}
+
 /** וובהוק ציבורי: יוצר פניות לכל ה־accounts שמתאימים לתחום ולעיר */
 export async function broadcastInquiryByDomainAndCity(body: {
   domain: string
   city: string
   description?: string
+  phone?: string
+  customerName?: string
 }) {
+  const payload: Record<string, string> = {
+    domain: body.domain.trim(),
+    city: body.city.trim(),
+  }
+  const d = body.description?.trim()
+  if (d) payload.description = d
+  const phone = body.phone?.trim()
+  if (phone) payload.phone = phone
+  const customerName = body.customerName?.trim()
+  if (customerName) payload.customerName = customerName
+
   return csFetch<{ matchedAccounts: number; createdJobs: number; jobIds: number[] }>(
     '/jobs/webhook/create-job',
     {
       method: 'POST',
-      body: {
-        domain: body.domain.trim(),
-        city: body.city.trim(),
-        ...(body.description?.trim() ? { description: body.description.trim() } : {}),
-      },
+      body: payload,
       noAuth: true,
     },
   )
