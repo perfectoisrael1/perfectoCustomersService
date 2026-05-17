@@ -6,28 +6,39 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
+  CircularProgress,
+  IconButton,
+  InputAdornment,
   Stack,
   Tab,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Tabs,
   TextField,
-  Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
+import CloseIcon from '@mui/icons-material/Close'
 import AddIcon from '@mui/icons-material/Add'
+import SearchIcon from '@mui/icons-material/Search'
 import LeadEditDialog from '../components/LeadEditDialog'
 import {
   LEAD_PHONE_EMPHASIS,
-  STANDARD_TABLE_BODY_FONT_PX,
   formatLeadPhoneDisplay,
   getLeadStatusColors,
-  leadTableScrollbarSx,
 } from '../lib/leadsUi'
+import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
+import CsTableContainer from '../components/CsStandardTable'
+import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
+import {
+  STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
+  GAP_BELOW_INNER_NAV_PX,
+  CS_PAGE_FILL_MIN_HEIGHT_CSS,
+} from '../layout/headerLayout'
 import { useAuth } from '../context/useAuth'
 import {
   createLead,
@@ -40,12 +51,53 @@ import {
 
 type LeadTab = 'all' | 'today' | 'mine'
 
-const STDTBL_PAD = 6
+type LeadsSortColumn =
+  | 'name'
+  | 'phone'
+  | 'category'
+  | 'followUpDate'
+  | 'status'
+  | 'details'
+  | 'created'
+  | 'responsible'
+
+function leadSortValue(row: Lead, col: LeadsSortColumn): string {
+  switch (col) {
+    case 'name':
+      return String(row.name ?? '')
+    case 'phone':
+      return String(row.phone ?? '')
+    case 'category':
+      return String(row.category ?? '')
+    case 'followUpDate':
+      return row.followUpDate ? String(row.followUpDate).slice(0, 19) : ''
+    case 'status':
+      return String(row.status ?? '')
+    case 'details':
+      return String(row.details ?? '')
+    case 'created':
+      return String(row.created ?? '')
+    case 'responsible':
+      return String(row.responsible ?? '')
+    default:
+      return ''
+  }
+}
+
+function isMineRow(row: Lead, user: ReturnType<typeof useAuth>['user']): boolean {
+  if (!user) return false
+  const me = [user.fullName, user.username]
+    .map((s) => String(s || '').trim().toLowerCase())
+    .filter(Boolean)
+  const resp = String(row.responsible || '').trim().toLowerCase()
+  return me.some((m) => resp === m || resp.includes(m))
+}
 
 export default function LeadsPage() {
   const theme = useTheme()
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
+
   const tab = useMemo<LeadTab>(() => {
     const v = searchParams.get('view')
     if (v === 'all') return 'all'
@@ -67,8 +119,12 @@ export default function LeadsPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<LeadInput>({})
 
-  const pad = `${STDTBL_PAD}px`
-  const padImportant = `${STDTBL_PAD}px !important`
+  const [sort, setSort] = useState<{ col: LeadsSortColumn; dir: 'asc' | 'desc' }>({
+    col: 'created',
+    dir: 'desc',
+  })
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -86,6 +142,22 @@ export default function LeadsPage() {
     void loadAll()
   }, [loadAll])
 
+  const counts = useMemo(() => {
+    const todayIso = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+    const todayRows = allRows.filter((r) => String(r.created || '').startsWith(todayIso))
+    const mineRows = user ? allRows.filter((r) => isMineRow(r, user)) : []
+    return {
+      mine: mineRows.length,
+      today: todayRows.length,
+      all: allRows.length,
+    }
+  }, [allRows, user])
+
   const tabRows = useMemo(() => {
     if (tab === 'today') {
       const todayIso = new Intl.DateTimeFormat('en-CA', {
@@ -97,11 +169,7 @@ export default function LeadsPage() {
       return allRows.filter((r) => String(r.created || '').startsWith(todayIso))
     }
     if (tab === 'mine' && user) {
-      const me = [user.fullName, user.username].map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
-      return allRows.filter((r) => {
-        const resp = String(r.responsible || '').trim().toLowerCase()
-        return me.some((m) => resp === m || resp.includes(m))
-      })
+      return allRows.filter((r) => isMineRow(r, user))
     }
     return allRows
   }, [allRows, tab, user])
@@ -115,9 +183,38 @@ export default function LeadsPage() {
         .join(' ')
       const qd = q.replace(/\D/g, '')
       const phone = String(r.phone || '').replace(/\D/g, '')
-      return blob.includes(q) || (qd && phone.includes(qd))
+      return blob.includes(q) || (qd.length > 0 && phone.includes(qd))
     })
   }, [query, tabRows])
+
+  useEffect(() => {
+    setPage(0)
+  }, [tab, query, sort.col, sort.dir])
+
+  const sortedRows = useMemo(() => {
+    const rows = [...filtered]
+    const { col: sortColumn, dir: sortDir } = sort
+    rows.sort((a, b) => {
+      const va = leadSortValue(a, sortColumn)
+      const vb = leadSortValue(b, sortColumn)
+      const cmp = va.localeCompare(vb, 'he', { numeric: true })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return rows
+  }, [filtered, sort])
+
+  const pageRows = useMemo(() => {
+    const start = page * rowsPerPage
+    return sortedRows.slice(start, start + rowsPerPage)
+  }, [sortedRows, page, rowsPerPage])
+
+  const onSortColumn = useCallback((col: LeadsSortColumn) => {
+    setSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: col === 'created' ? 'desc' : 'asc' },
+    )
+  }, [])
 
   const openNew = () => {
     setForm({
@@ -170,7 +267,7 @@ export default function LeadsPage() {
 
   const handleDelete = async () => {
     if (editor == null || editor === 'new') return
-    if (!window.confirm('למחוק ליד זה?')) return
+    if (!window.confirm('האם אתה בטוח?')) return
     setSaving(true)
     setError(null)
     try {
@@ -184,230 +281,291 @@ export default function LeadsPage() {
     }
   }
 
-  const tableContainerSx = {
-    backgroundColor: 'background.paper',
-    borderRadius: 3,
-    border: `1px solid ${theme.palette.divider}`,
-    boxShadow: '0 6px 20px rgba(0,0,0,0.05)',
-    overflowX: 'auto',
-    overflowY: 'auto',
-    direction: 'rtl',
-    minHeight: 0,
-    minWidth: 0,
-    width: '100%',
-    maxWidth: '100%',
-    maxHeight: 'calc(100vh - 340px)',
-    ...leadTableScrollbarSx(theme),
-  }
-
-  const tableSx = {
-    width: '100%',
-    tableLayout: 'fixed' as const,
-    minWidth: 0,
-    direction: 'rtl' as const,
-    borderCollapse: 'separate' as const,
-    borderSpacing: 0,
-    '& th, & td': {
-      height: '30px',
-      maxHeight: '30px',
-      paddingTop: '0px',
-      paddingBottom: '0px',
-      paddingLeft: pad,
-      paddingRight: pad,
-      boxSizing: 'border-box',
-    },
-    '& thead': {
-      position: 'sticky',
-      top: 0,
-      zIndex: 12,
-      backgroundColor: theme.palette.mode === 'dark' ? theme.palette.background.paper : '#E1EFF2 !important',
-    },
-    '& thead .MuiTableCell-head': {
-      color: 'text.primary',
-      fontWeight: 800,
-      fontSize: 17,
-      borderColor: theme.palette.divider,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      backgroundColor: 'transparent !important',
-      borderRight: `0.5px solid ${theme.palette.divider}`,
-      borderBottom: `0.5px solid ${theme.palette.divider}`,
-      paddingLeft: padImportant,
-      paddingRight: padImportant,
-    },
-    '& td': {
-      color: 'text.primary',
-      borderColor: theme.palette.divider,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      lineHeight: 1.2,
-      verticalAlign: 'middle',
-      fontSize: STANDARD_TABLE_BODY_FONT_PX,
-      borderRight: `0.5px solid ${theme.palette.divider}`,
-      borderBottom: `0.5px solid ${theme.palette.divider}`,
-      paddingLeft: padImportant,
-      paddingRight: padImportant,
-    },
-    '& tbody tr': { backgroundColor: 'background.paper', height: '30px', maxHeight: '30px' },
-    '& tbody tr:hover': {
-      backgroundColor: 'rgba(11,114,133,0.04) !important',
-    },
-  }
+  const colSpan = 8
 
   return (
     <>
-      <Card elevation={1} sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack spacing={2}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              sx={{ justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' } }}
-            >
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                  לידים
-                </Typography>
-              </Box>
-              <Button variant="contained" startIcon={<AddIcon />} onClick={openNew}>
-                ליד חדש
-              </Button>
-            </Stack>
+      <Box sx={{ mx: -2 }}>
+        <Card
+          elevation={1}
+          sx={{
+            borderRadius: 3,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: CS_PAGE_FILL_MIN_HEIGHT_CSS,
+          }}
+        >
+          <CardContent
+            sx={{ px: 2, pb: 2, pt: 0, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            <Stack spacing={0} sx={{ flex: 1, minHeight: 0, direction: 'rtl', textAlign: 'right' }}>
+              <Box
+                sx={{
+                  position: 'sticky',
+                  top: STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
+                  zIndex: (t) => t.zIndex.appBar - 1,
+                  bgcolor: 'background.paper',
+                  mx: -2,
+                  px: 2,
+                  py: 0,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    direction: 'rtl',
+                    width: '100%',
+                  }}
+                >
+                  <Tabs
+                    value={tab}
+                    onChange={(_e, v) => setLeadTab(v as LeadTab)}
+                    variant="scrollable"
+                    allowScrollButtonsMobile
+                    sx={{
+                      flex: '1 1 auto',
+                      minWidth: { xs: 'min(100%, 280px)', sm: 120 },
+                      borderBottom: 'none',
+                      minHeight: 48,
+                      '& .MuiTabs-indicator': { height: 3 },
+                    }}
+                  >
+                    <Tab value="mine" label={`הלידים שלי (${counts.mine})`} />
+                    <Tab value="today" label={`לידים מהיום (${counts.today})`} />
+                    <Tab value="all" label={`כל הלידים (${counts.all})`} />
+                  </Tabs>
 
-            <Tabs value={tab} onChange={(_e, v) => setLeadTab(v as LeadTab)} variant="scrollable" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tab value="mine" label="הלידים שלי" />
-              <Tab value="today" label="לידים מהיום" />
-              <Tab value="all" label="כל הלידים" />
-            </Tabs>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <TextField size="small" placeholder="חיפוש…" value={query} onChange={(e) => setQuery(e.target.value)} sx={{ flex: 1 }} />
-              <Button variant="outlined" onClick={() => void loadAll()}>רענון</Button>
-            </Stack>
-
-            {error ? <Alert severity="error">{error}</Alert> : null}
-
-            <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              {loading ? (
-                <Box sx={{ py: 6, textAlign: 'center' }}>טוען…</Box>
-              ) : (
-                <TableContainer sx={tableContainerSx}>
-                  <Table stickyHeader size="small" sx={tableSx}>
-                    <TableHead>
-                      <TableRow sx={{ direction: 'rtl' }}>
-                        <TableCell sx={{ width: '11%', minWidth: 0, textAlign: 'center' }}>שם מלא</TableCell>
-                        <TableCell sx={{ width: '9%', minWidth: 0, maxWidth: '11%', px: 0.25, textAlign: 'center' }}>טלפון</TableCell>
-                        <TableCell sx={{ width: '10%', minWidth: 0, textAlign: 'right' }}>תחום</TableCell>
-                        <TableCell sx={{ width: '16%', minWidth: '158px', maxWidth: '19%', textAlign: 'center' }}>תאריך פולואפ</TableCell>
-                        <TableCell sx={{ width: '10%', minWidth: 0, textAlign: 'center' }}>סטטוס</TableCell>
-                        <TableCell sx={{ width: '20%', minWidth: 0, textAlign: 'right' }}>הערות</TableCell>
-                        <TableCell sx={{ width: '8%', minWidth: 0, textAlign: 'right' }}>נוצר</TableCell>
-                        <TableCell sx={{ width: '6%', minWidth: 0, textAlign: 'right' }}>אחראי</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filtered.map((row) => {
-                        const statusColors = getLeadStatusColors(row.status)
-                        return (
-                          <TableRow
-                            key={row.id}
-                            hover
-                            sx={{
-                              direction: 'rtl',
-                              cursor: 'pointer',
-                              '&:hover': { backgroundColor: 'rgba(11,114,133,0.04) !important' },
-                            }}
-                            onClick={() => openEdit(row)}
-                          >
-                            <TableCell align="center" sx={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                              <Box
-                                sx={{
-                                  fontSize: 15,
-                                  minWidth: 0,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  width: '100%',
-                                }}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      flexShrink: 0,
+                      flexWrap: 'nowrap',
+                    }}
+                  >
+                    <Button variant="contained" startIcon={<AddIcon />} onClick={openNew} sx={{ whiteSpace: 'nowrap' }}>
+                      ליד חדש
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={() => void loadAll()}
+                      sx={{
+                        backgroundColor: '#1565c0',
+                        color: '#fff',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      רענון
+                    </Button>
+                    <TextField
+                      size="small"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="חיפוש"
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                            </InputAdornment>
+                          ),
+                          endAdornment: query ? (
+                            <InputAdornment position="end">
+                              <IconButton
+                                size="small"
+                                onClick={() => setQuery('')}
+                                sx={{ p: 0.2 }}
+                                aria-label="ניקוי חיפוש"
                               >
+                                <CloseIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </InputAdornment>
+                          ) : null,
+                        },
+                      }}
+                      sx={{
+                        width: { xs: 160, sm: 190 },
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 999,
+                          backgroundColor: 'background.paper',
+                          fontSize: 14,
+                          '& fieldset': { borderColor: 'rgba(0,0,0,0.18)' },
+                          '&:hover fieldset': { borderColor: 'rgba(0,0,0,0.35)' },
+                          '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                        },
+                        '& .MuiInputBase-input': {
+                          textAlign: 'right',
+                          py: '7px',
+                          direction: 'rtl',
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+              </Box>
+
+              {error ? (
+                <Stack sx={{ gap: `${GAP_BELOW_INNER_NAV_PX}px`, mt: `${GAP_BELOW_INNER_NAV_PX}px` }}>
+                  <Alert severity="error">{error}</Alert>
+                </Stack>
+              ) : null}
+
+              {loading ? (
+                <Box
+                  sx={{
+                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                    py: 8,
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CircularProgress color="primary" />
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                  }}
+                >
+                  <Box sx={csPagedTableOuterBoxSx(theme)}>
+                    <CsTableContainer sx={csTableInnerPagedScrollSx}>
+                      <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell align="center" sortDirection={sort.col === 'name' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'name'}
+                              direction={sort.col === 'name' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('name')}
+                            >
+                              שם מלא
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="center" sortDirection={sort.col === 'phone' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'phone'}
+                              direction={sort.col === 'phone' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('phone')}
+                            >
+                              טלפון
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sortDirection={sort.col === 'category' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'category'}
+                              direction={sort.col === 'category' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('category')}
+                            >
+                              תחום
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="center" sortDirection={sort.col === 'followUpDate' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'followUpDate'}
+                              direction={sort.col === 'followUpDate' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('followUpDate')}
+                            >
+                              תאריך פולואפ
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="center" sortDirection={sort.col === 'status' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'status'}
+                              direction={sort.col === 'status' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('status')}
+                            >
+                              סטטוס
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sortDirection={sort.col === 'details' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'details'}
+                              direction={sort.col === 'details' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('details')}
+                            >
+                              הערות
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sortDirection={sort.col === 'created' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'created'}
+                              direction={sort.col === 'created' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('created')}
+                            >
+                              נוצר
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell sortDirection={sort.col === 'responsible' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'responsible'}
+                              direction={sort.col === 'responsible' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('responsible')}
+                            >
+                              אחראי
+                            </TableSortLabel>
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {pageRows.map((row) => {
+                          const statusColors = getLeadStatusColors(row.status)
+                          return (
+                            <TableRow
+                              key={row.id}
+                              hover
+                              sx={{ cursor: 'pointer' }}
+                              onClick={() => openEdit(row)}
+                            >
+                              <TableCell align="center" title={row.name || ''}>
                                 {row.name || '—'}
-                              </Box>
-                            </TableCell>
-                            <TableCell align="center" sx={{ px: 0.25, minWidth: 0, textAlign: 'center', verticalAlign: 'middle' }}>
-                              <Box
+                              </TableCell>
+                              <TableCell
+                                align="center"
+                                title={formatLeadPhoneDisplay(row.phone)}
                                 sx={{
-                                  direction: 'ltr',
-                                  display: 'flex',
-                                  justifyContent: 'center',
-                                  width: '100%',
-                                  fontSize: 15,
-                                  color: LEAD_PHONE_EMPHASIS,
+                                  '&, & .MuiTypography-root': {
+                                    direction: 'ltr',
+                                    fontFeatureSettings: 'normal',
+                                  },
                                   fontWeight: 400,
+                                  color: LEAD_PHONE_EMPHASIS,
                                 }}
                               >
                                 {formatLeadPhoneDisplay(row.phone)}
-                              </Box>
-                            </TableCell>
-                            <TableCell align="right">
-                              <Box
-                                sx={{
-                                  fontSize: 15,
-                                  minWidth: 0,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  width: '100%',
-                                }}
-                              >
-                                {row.category || '—'}
-                              </Box>
-                            </TableCell>
-                            <TableCell align="center">
-                              {row.followUpDate ? String(row.followUpDate).slice(0, 10) : '—'}
-                            </TableCell>
-                            <TableCell
-                              align="center"
-                              sx={{
-                                backgroundColor: `${statusColors.bg} !important`,
-                                color: `${statusColors.fg} !important`,
-                                textAlign: 'center !important',
-                                verticalAlign: 'middle',
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                '&&': {
-                                  paddingLeft: 0,
-                                  paddingRight: 0,
-                                  paddingTop: 0,
-                                  paddingBottom: 0,
-                                },
-                              }}
-                            >
-                              {row.status || '—'}
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              sx={{
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                verticalAlign: 'middle',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {row.details || '—'}
-                            </TableCell>
-                            <TableCell align="right" sx={{ minWidth: 0, maxWidth: 45, width: 45, overflow: 'hidden' }}>
-                              <Box
-                                sx={{
-                                  fontSize: 15,
-                                  color: 'text.secondary',
-                                  whiteSpace: 'nowrap',
-                                  direction: 'ltr',
-                                  textAlign: 'right',
-                                }}
-                              >
+                              </TableCell>
+                              <TableCell title={row.category || ''}>{row.category || '—'}</TableCell>
+                              <TableCell align="center">
+                                {row.followUpDate ? String(row.followUpDate).slice(0, 10) : '—'}
+                              </TableCell>
+                              <TableCell align="center" sx={{ overflow: 'visible', textOverflow: 'clip' }}>
+                                <Chip
+                                  size="small"
+                                  label={row.status || '—'}
+                                  sx={{
+                                    bgcolor: statusColors.bg,
+                                    color: statusColors.fg,
+                                    fontWeight: 700,
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell sx={{ maxWidth: 280 }} title={row.details || ''}>
+                                {row.details || '—'}
+                              </TableCell>
+                              <TableCell sx={{ direction: 'ltr', textAlign: 'right', color: 'text.secondary' }}>
                                 {row.created
                                   ? new Date(row.created).toLocaleDateString('he-IL', {
                                       day: '2-digit',
@@ -415,29 +573,43 @@ export default function LeadsPage() {
                                       year: '2-digit',
                                     })
                                   : '—'}
-                              </Box>
-                            </TableCell>
-                            <TableCell align="right" sx={{ minWidth: 0, overflow: 'hidden', verticalAlign: 'middle' }}>
-                              {row.responsible || '—'}
+                              </TableCell>
+                              <TableCell title={row.responsible || ''}>{row.responsible || '—'}</TableCell>
+                            </TableRow>
+                          )
+                        })}
+                        {sortedRows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
+                              אין נתונים להצגה
                             </TableCell>
                           </TableRow>
-                        )
-                      })}
-                      {filtered.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
-                            אין נתונים
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Box>
-          </Stack>
-        </CardContent>
-      </Card>
+                        ) : null}
+                      </TableBody>
+                      </Table>
+                    </CsTableContainer>
+                  <CsTablePaginationFooter
+                    rowsPerPageOptions={[10, 25, 50, 100]}
+                    count={sortedRows.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={(_e, next) => setPage(next)}
+                    onRowsPerPageChange={(e) => {
+                      setRowsPerPage(Number.parseInt(e.target.value, 10))
+                      setPage(0)
+                    }}
+                    labelRowsPerPage="שורות בעמוד:"
+                    labelDisplayedRows={({ from, to, count }) =>
+                      count === 0 ? '0 מתוך 0' : `${from}–${to} מתוך ${count}`
+                    }
+                  />
+                </Box>
+              </Box>
+            )}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
 
       <LeadEditDialog
         open={!!editor}

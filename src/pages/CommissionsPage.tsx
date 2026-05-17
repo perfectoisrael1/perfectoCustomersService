@@ -128,8 +128,6 @@ export default function CommissionsPage() {
     <Card elevation={1} sx={{ borderRadius: 3 }}>
       <CardContent>
         <Stack spacing={2} sx={{ direction: 'rtl' }}>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>מחירון עמלות</Typography>
-
           <Autocomplete
             freeSolo
             options={searchOptions}

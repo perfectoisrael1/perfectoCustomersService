@@ -94,6 +94,7 @@ export type Task = {
   description: string | null
   responsible: string | null
   status: string | null
+  priority: string | null
   project_name: string | null
   sprint_number: string | null
   execution_date: string | null
@@ -226,6 +227,10 @@ export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
 }
 
+export async function deleteJob(id: number) {
+  return csFetch<void>(`/customer-service/jobs/${id}`, { method: 'DELETE' })
+}
+
 /** אישור החרגה: הפנייה עוברת ל«נדחה», סיבת ההחרגה ל«מאושר החרגה - …», והחזרת קרדיטים לבעל המקצוע כשנוכו בעת אישור הפנייה */
 export async function approveJobExclusion(jobId: number) {
   return csFetch<Job>(`/customer-service/jobs/${jobId}/approve-exclusion`, {
@@ -277,6 +282,10 @@ export async function getJobsToday() {
 
 export async function getAccounts() {
   return csFetch<Account[]>('/customer-service/accounts')
+}
+
+export async function deleteAccount(id: number) {
+  return csFetch<void>(`/customer-service/accounts/${id}`, { method: 'DELETE' })
 }
 
 export async function getLeads(created?: 'today') {
@@ -370,6 +379,7 @@ export type TaskInput = Partial<{
   description: string | null
   responsible: string | null
   status: string | null
+  priority: string | null
   project_name: string | null
   sprint_number: string | null
   execution_date: string | null
@@ -388,10 +398,69 @@ export async function deleteTask(id: number) {
   return csFetch<void>(`/customer-service/tasks/${id}`, { method: 'DELETE' })
 }
 
+/**
+ * multipart — מחזיר URL ציבורי לכל קובץ (כמו ייקירוס /tasks/:id/upload-files).
+ */
+export async function uploadTaskFiles(
+  taskId: number,
+  files: File[],
+): Promise<{ urls: string[] }> {
+  const token = getStoredToken()
+  const fd = new FormData()
+  for (let i = 0; i < files.length; i += 1) {
+    fd.append('files', files[i])
+  }
+  const absolute = `${baseUrl()}/customer-service/tasks/${taskId}/upload-files`
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(absolute, {
+    method: 'POST',
+    headers,
+    body: fd,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  return (await res.json()) as { urls: string[] }
+}
+
 export async function getCities() {
   return csFetch<City[]>('/customer-service/catalog/cities')
 }
 
 export async function getServices() {
   return csFetch<Service[]>('/customer-service/catalog/services')
+}
+
+export type PerfectoCustomerServiceUser = Record<string, unknown> & { id: number }
+
+const PERFECTO_CS_USERS_PATH = '/customer-service/perfecto-customer-service-users'
+
+export async function getPerfectoCustomerServiceUsers() {
+  return csFetch<PerfectoCustomerServiceUser[]>(PERFECTO_CS_USERS_PATH)
+}
+
+export type PerfectoCustomerServiceUserInput = Record<string, unknown>
+
+export async function createPerfectoCustomerServiceUser(body: PerfectoCustomerServiceUserInput) {
+  return csFetch<PerfectoCustomerServiceUser>(PERFECTO_CS_USERS_PATH, { method: 'POST', body })
+}
+
+export async function patchPerfectoCustomerServiceUser(
+  id: number,
+  body: PerfectoCustomerServiceUserInput,
+) {
+  return csFetch<PerfectoCustomerServiceUser>(`${PERFECTO_CS_USERS_PATH}/${id}`, {
+    method: 'PATCH',
+    body,
+  })
+}
+
+export async function deletePerfectoCustomerServiceUser(id: number) {
+  return csFetch<{ ok?: boolean } | void>(`${PERFECTO_CS_USERS_PATH}/${id}`, { method: 'DELETE' })
 }

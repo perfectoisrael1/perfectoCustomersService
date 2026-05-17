@@ -73,8 +73,6 @@ export default function CitiesPage() {
     <Card elevation={1} sx={{ borderRadius: 3 }}>
       <CardContent>
         <Stack spacing={2}>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>אזורים וערים</Typography>
-
           <Tabs value={tab} onChange={(_e, v) => setTab(v as CityTab)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Tab value="list" label="כל הערים" />
             <Tab value="regions" label="לפי אזור" />

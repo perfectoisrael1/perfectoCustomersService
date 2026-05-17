@@ -5,9 +5,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   FormControlLabel,
-  IconButton,
   MenuItem,
   Select,
   Stack,
@@ -15,10 +13,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import CloseIcon from '@mui/icons-material/Close'
-import DeleteIcon from '@mui/icons-material/Delete'
 import type { Lead } from '../api/csApi'
 import type { LeadInput } from '../api/csApi'
+import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
 import {
   LEADS_DIALOG_ACCENT,
   LEADS_STATUS_COLORS,
@@ -114,26 +111,27 @@ export default function LeadEditDialog({
         paper: { sx: { borderRadius: 4, direction: 'rtl', overflow: 'hidden' } },
       }}
     >
-      <DialogTitle
-        sx={{
+      <CsDialogTitleWithMenu
+        heading={(
+          <Typography sx={{ fontWeight: 800, fontSize: 18, color: LEADS_DIALOG_ACCENT }}>
+            {title}
+          </Typography>
+        )}
+        onClose={() => !saving && onClose()}
+        closeDisabled={saving}
+        onRequestDelete={!isNew ? () => void onDelete() : undefined}
+        menuDisabled={saving}
+        dialogTitleSx={{
           background: (theme) =>
             theme.palette.mode === 'dark'
               ? theme.palette.background.paper
               : 'linear-gradient(135deg, #E1EFF2 0%, #f0f7f9 100%)',
           borderBottom: '1px solid',
           borderColor: 'divider',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           py: 2,
           px: 3,
         }}
-      >
-        <Typography sx={{ fontWeight: 800, fontSize: 18, color: LEADS_DIALOG_ACCENT }}>{title}</Typography>
-        <IconButton onClick={() => !saving && onClose()} size="small" sx={{ color: 'text.secondary' }} aria-label="סגור">
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
+      />
 
       <DialogContent sx={{ px: 3, pb: 3, pt: '12px !important' }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
@@ -356,14 +354,7 @@ export default function LeadEditDialog({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-        <Box>
-          {editor && editor !== 'new' ? (
-            <Button color="error" startIcon={<DeleteIcon />} onClick={() => void onDelete()} disabled={saving}>
-              מחיקה
-            </Button>
-          ) : null}
-        </Box>
+      <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'flex-end' }}>
         <Stack direction="row" spacing={1}>
           <Button onClick={() => onClose()} disabled={saving}>
             ביטול

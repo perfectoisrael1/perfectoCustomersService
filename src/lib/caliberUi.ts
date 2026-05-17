@@ -150,6 +150,40 @@ export function accountStatusCellBg(statusDisplay: string | null | undefined): s
 
 export const TASK_STATUS_OPTIONS = ['חדשה', 'עובדים על זה', 'תקוע', 'בדיקות', 'בוצע'] as const
 
+export const TASK_PRIORITY_OPTIONS = ['דחוף', 'לא דחוף'] as const
+
+/** צבעי תא סטטוס משימה — מיושר עם יקירוס */
+export function taskStatusCellColors(status: string | null | undefined): { bg: string; fg: string } {
+  switch (String(status || '').trim()) {
+    case 'חדשה':
+      return { bg: '#E3F2FD', fg: '#1565C0' }
+    case 'עובדים על זה':
+      return { bg: '#FFF3E0', fg: '#EF6C00' }
+    case 'תקוע':
+      return { bg: '#FFEBEE', fg: '#C62828' }
+    case 'בדיקות':
+      return { bg: '#F3E5F5', fg: '#7B1FA2' }
+    case 'בוצע':
+      return { bg: '#E8F5E9', fg: '#2E7D32' }
+    default:
+      return { bg: '#F5F5F5', fg: '#757575' }
+  }
+}
+
+/** צבעי תא חשיבות משימה — אותו עקרון כמו סטטוס */
+export function taskPriorityCellColors(priority: string | null | undefined): { bg: string; fg: string } {
+  const raw = String(priority || '').trim()
+  const p = raw || 'לא דחוף'
+  switch (p) {
+    case 'דחוף':
+      return { bg: '#FFEBEE', fg: '#C62828' }
+    case 'לא דחוף':
+      return { bg: '#ECEFF1', fg: '#455A64' }
+    default:
+      return { bg: '#F5F5F5', fg: '#757575' }
+  }
+}
+
 export const TASK_PROJECT_OPTIONS = [
   'פרפקטו',
   'מייק',

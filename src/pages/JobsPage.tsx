@@ -14,20 +14,23 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   Stack,
   Tab,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Tabs,
   TextField,
   Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { createFilterOptions } from '@mui/material/Autocomplete'
 import CloseIcon from '@mui/icons-material/Close'
+import SearchIcon from '@mui/icons-material/Search'
 import {
   formatCsPhoneDisplay,
   isCreatedTodayJerusalem,
@@ -36,6 +39,7 @@ import {
 import {
   approveJobExclusion,
   broadcastInquiryByDomainAndCity,
+  deleteJob,
   getCities,
   getJobs,
   getServices,
@@ -44,8 +48,35 @@ import {
   type Job,
   type Service,
 } from '../api/csApi'
+import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
+import CsTableContainer from '../components/CsStandardTable'
+import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
+import {
+  STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
+  GAP_BELOW_INNER_NAV_PX,
+  CS_PAGE_FILL_MIN_HEIGHT_CSS,
+} from '../layout/headerLayout'
 
 type JobsTab = 'today' | 'exceptions' | 'search' | 'leave'
+
+/** עמודות מיון לטבלת פניות (תואם עמודות תצוגה) */
+type JobsSortColumn =
+  | 'customerDisplay'
+  | 'phoneNumber'
+  | 'description'
+  | 'accountName'
+  | 'specialtiesCategory'
+  | 'statusLabel'
+  | 'exclusionReason'
+  | 'created'
+
+function jobSortValue(row: Job, col: JobsSortColumn): string {
+  if (col === 'customerDisplay') {
+    return String(row.businessName || row.accountName || '').trim()
+  }
+  return String(row[col] ?? '').trim()
+}
 
 const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'search', 'leave']
 
@@ -90,6 +121,9 @@ const filterAutocompleteOptions = createFilterOptions<string>({
   stringify: (option) => option,
 })
 
+/** מספר עמודות בטבלת פניות (כולל «פעולה») — ל־colSpan בשורת «אין נתונים» */
+const JOBS_TABLE_COL_SPAN = 10
+
 function buildDomainOptions(services: Service[]): string[] {
   const set = new Set<string>()
   for (const s of services) {
@@ -127,6 +161,7 @@ function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
 }
 
 export default function JobsPage() {
+  const theme = useTheme()
   const { segment } = useParams<{ segment: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -145,6 +180,14 @@ export default function JobsPage() {
   } | null>(null)
   const [broadcastingId, setBroadcastingId] = useState<number | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [detailDeleting, setDetailDeleting] = useState(false)
+
+  const [sort, setSort] = useState<{ col: JobsSortColumn; dir: 'asc' | 'desc' }>({
+    col: 'created',
+    dir: 'desc',
+  })
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
 
   const [leaveDomain, setLeaveDomain] = useState('')
   const [leaveCity, setLeaveCity] = useState('')
@@ -351,6 +394,35 @@ export default function JobsPage() {
     })
   }, [query, tabRows])
 
+  useEffect(() => {
+    setPage(0)
+  }, [tab, query, sort.col, sort.dir])
+
+  const sortedRows = useMemo(() => {
+    const rows = [...filtered]
+    const { col: sortColumn, dir: sortDir } = sort
+    rows.sort((a, b) => {
+      const va = jobSortValue(a, sortColumn)
+      const vb = jobSortValue(b, sortColumn)
+      const cmp = va.localeCompare(vb, 'he', { numeric: true })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return rows
+  }, [filtered, sort])
+
+  const pageRows = useMemo(() => {
+    const start = page * rowsPerPage
+    return sortedRows.slice(start, start + rowsPerPage)
+  }, [sortedRows, page, rowsPerPage])
+
+  const onSortColumn = useCallback((col: JobsSortColumn) => {
+    setSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: col === 'created' ? 'desc' : 'asc' },
+    )
+  }, [])
+
   const counts = useMemo(() => {
     return {
       today: filterJobsForTab(allJobs, 'today').length,
@@ -359,56 +431,166 @@ export default function JobsPage() {
     }
   }, [allJobs])
 
+  const removeDetailJob = async () => {
+    if (!detail) return
+    if (!window.confirm('האם אתה בטוח?')) return
+    setDetailDeleting(true)
+    setError(null)
+    try {
+      await deleteJob(detail.id)
+      setDetail(null)
+      await load({ silent: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת הפנייה')
+    } finally {
+      setDetailDeleting(false)
+    }
+  }
+
   return (
     <>
-      <Card elevation={1} sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack spacing={2}>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              פניות
-            </Typography>
-
-            <Tabs
-              value={tab}
-              onChange={(_e, v) => setTab(v as JobsTab)}
-              variant="scrollable"
-              allowScrollButtonsMobile
-              sx={{ borderBottom: 1, borderColor: 'divider' }}
+      <Box sx={{ mx: -2 }}>
+        <Card
+          elevation={1}
+          sx={{
+            borderRadius: 3,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: CS_PAGE_FILL_MIN_HEIGHT_CSS,
+          }}
+        >
+          <CardContent
+            sx={{ px: 2, pb: 2, pt: 0, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            <Stack spacing={0} sx={{ flex: 1, minHeight: 0, direction: 'rtl', textAlign: 'right' }}>
+            <Box
+              sx={{
+                position: 'sticky',
+                top: STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
+                zIndex: (theme) => theme.zIndex.appBar - 1,
+                bgcolor: 'background.paper',
+                mx: -2,
+                px: 2,
+                py: 0,
+                borderBottom: 1,
+                borderColor: 'divider',
+              }}
             >
-              <Tab value="today" label={`פניות היום (${counts.today})`} />
-              <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
-              <Tab value="search" label={`כל הפניות (${counts.search})`} />
-              <Tab value="leave" label="השארת פנייה" />
-            </Tabs>
-
-            {tab === 'leave' ? null : (
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1}
-                sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  direction: 'rtl',
+                  width: '100%',
+                }}
               >
-                <TextField
-                  size="small"
-                  placeholder="חיפוש לפי לקוח, טלפון, תוכן, סטטוס…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  sx={{ flex: 1, minWidth: 200 }}
-                />
-                <Button variant="contained" onClick={() => void load()}>
-                  רענון
-                </Button>
-              </Stack>
-            )}
+                <Tabs
+                  value={tab}
+                  onChange={(_e, v) => setTab(v as JobsTab)}
+                  variant="scrollable"
+                  allowScrollButtonsMobile
+                  sx={{
+                    flex: '1 1 auto',
+                    minWidth: { xs: 'min(100%, 280px)', sm: 120 },
+                    borderBottom: 'none',
+                    minHeight: 48,
+                    '& .MuiTabs-indicator': { height: 3 },
+                  }}
+                >
+                  <Tab value="today" label={`פניות היום (${counts.today})`} />
+                  <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
+                  <Tab value="search" label={`כל הפניות (${counts.search})`} />
+                  <Tab value="leave" label="השארת פנייה" />
+                </Tabs>
 
-            {successMessage ? (
-              <Alert severity="success" onClose={() => setSuccessMessage(null)}>
-                {successMessage}
-              </Alert>
+                {tab === 'leave' ? null : (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      flexShrink: 0,
+                      flexWrap: 'nowrap',
+                    }}
+                  >
+                    <TextField
+                      size="small"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="חיפוש"
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                            </InputAdornment>
+                          ),
+                          endAdornment: query ? (
+                            <InputAdornment position="end">
+                              <IconButton
+                                size="small"
+                                onClick={() => setQuery('')}
+                                sx={{ p: 0.2 }}
+                                aria-label="ניקוי חיפוש"
+                              >
+                                <CloseIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </InputAdornment>
+                          ) : null,
+                        },
+                      }}
+                      sx={{
+                        width: { xs: 160, sm: 190 },
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 999,
+                          backgroundColor: 'background.paper',
+                          fontSize: 14,
+                          '& fieldset': { borderColor: 'rgba(0,0,0,0.18)' },
+                          '&:hover fieldset': { borderColor: 'rgba(0,0,0,0.35)' },
+                          '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                        },
+                        '& .MuiInputBase-input': {
+                          textAlign: 'right',
+                          py: '7px',
+                          direction: 'rtl',
+                        },
+                      }}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={() => void load()}
+                      sx={{
+                        backgroundColor: '#1565c0',
+                        color: '#fff',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      רענון
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+
+            {(successMessage || error) ? (
+              <Stack sx={{ gap: `${GAP_BELOW_INNER_NAV_PX}px`, mt: `${GAP_BELOW_INNER_NAV_PX}px` }}>
+                {successMessage ? (
+                  <Alert severity="success" onClose={() => setSuccessMessage(null)}>
+                    {successMessage}
+                  </Alert>
+                ) : null}
+                {error ? <Alert severity="error">{error}</Alert> : null}
+              </Stack>
             ) : null}
-            {error ? <Alert severity="error">{error}</Alert> : null}
 
             {tab === 'leave' ? (
-              <Stack spacing={2} sx={{ pt: 0.5, maxWidth: 560 }}>
+              <Stack spacing={2} sx={{ pt: `${GAP_BELOW_INNER_NAV_PX}px`, maxWidth: 560 }}>
                 <Typography variant="body2" color="text.secondary">
                   מילוי תחום ועיר חובה. שאר השדות אופציונליים — יתווספו לתיאור הפנייה שנשלח לבעלי המקצוע
                   הרלוונטיים (אותו מנגנון כמו וובהוק יצירת פניות). אפשר לבחור מהרשימה או להקליד ערך חופשי.
@@ -508,48 +690,126 @@ export default function JobsPage() {
                 </Box>
               </Stack>
             ) : loading ? (
-              <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
+              <Box
+                sx={{
+                  mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                  py: 8,
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
                 <CircularProgress color="primary" />
               </Box>
             ) : (
-              <>
-                <Typography variant="body2" color="text.secondary">
-                  מוצגות {filtered.length} רשומות
-                  {query.trim() ? ` מתוך ${tabRows.length} בטאב` : ''}
-                </Typography>
-                <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
-                  <Table stickyHeader size="small">
+              <Box
+                sx={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                }}
+              >
+                <Box sx={csPagedTableOuterBoxSx(theme)}>
+                  <CsTableContainer sx={csTableInnerPagedScrollSx}>
+                  <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 800 }}>שם / עסק (לקוח)</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>טלפון</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>תוכן הפניה</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>בעל מקצוע</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>תחום</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>סטטוס</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>החרגות</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>נוצר</TableCell>
+                        <TableCell sortDirection={sort.col === 'customerDisplay' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'customerDisplay'}
+                            direction={sort.col === 'customerDisplay' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('customerDisplay')}
+                          >
+                            שם / עסק (לקוח)
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'phoneNumber' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'phoneNumber'}
+                            direction={sort.col === 'phoneNumber' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('phoneNumber')}
+                          >
+                            טלפון
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'description' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'description'}
+                            direction={sort.col === 'description' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('description')}
+                          >
+                            תוכן הפניה
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'accountName' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'accountName'}
+                            direction={sort.col === 'accountName' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('accountName')}
+                          >
+                            בעל מקצוע
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'specialtiesCategory' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'specialtiesCategory'}
+                            direction={sort.col === 'specialtiesCategory' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('specialtiesCategory')}
+                          >
+                            תחום
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'statusLabel' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'statusLabel'}
+                            direction={sort.col === 'statusLabel' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('statusLabel')}
+                          >
+                            סטטוס
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'exclusionReason' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'exclusionReason'}
+                            direction={sort.col === 'exclusionReason' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('exclusionReason')}
+                          >
+                            החרגות
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell sortDirection={sort.col === 'created' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'created'}
+                            direction={sort.col === 'created' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('created')}
+                          >
+                            נוצר
+                          </TableSortLabel>
+                        </TableCell>
                         <TableCell align="center" sx={{ fontWeight: 800, minWidth: 200 }}>
                           פעולה
                         </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filtered.map((row) => (
+                      {pageRows.map((row) => (
                         <TableRow
                           key={row.id}
                           hover
                           sx={{ cursor: 'pointer' }}
                           onClick={() => setDetail(row)}
                         >
-                          <TableCell>{row.businessName || row.accountName}</TableCell>
+                          <TableCell title={row.businessName || row.accountName}>
+                            {row.businessName || row.accountName}
+                          </TableCell>
                           <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
-                          <TableCell sx={{ maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <TableCell sx={{ maxWidth: 260 }} title={row.description}>
                             {row.description}
                           </TableCell>
-                          <TableCell>{row.accountName}</TableCell>
+                          <TableCell title={row.accountName}>{row.accountName}</TableCell>
                           <TableCell>{row.specialtiesCategory}</TableCell>
-                          <TableCell>
+                          <TableCell sx={{ overflow: 'visible', textOverflow: 'clip' }}>
                             <Chip
                               size="small"
                               label={row.statusLabel || '—'}
@@ -560,11 +820,11 @@ export default function JobsPage() {
                               }}
                             />
                           </TableCell>
-                          <TableCell sx={{ maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <TableCell sx={{ maxWidth: 180 }} title={row.exclusionReason || ''}>
                             {row.exclusionReason || '—'}
                           </TableCell>
                           <TableCell>{row.created}</TableCell>
-                          <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                          <TableCell align="center" onClick={(e) => e.stopPropagation()} sx={{ overflow: 'visible', textOverflow: 'clip' }}>
                             {tab === 'exceptions' ? (
                               <Stack
                                 direction="row"
@@ -615,29 +875,47 @@ export default function JobsPage() {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {filtered.length === 0 ? (
+                      {sortedRows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+                          <TableCell colSpan={JOBS_TABLE_COL_SPAN} align="center" sx={{ py: 6 }}>
                             אין נתונים להצגה
                           </TableCell>
                         </TableRow>
                       ) : null}
                     </TableBody>
                   </Table>
-                </TableContainer>
-              </>
+                  </CsTableContainer>
+                <CsTablePaginationFooter
+                  rowsPerPageOptions={[10, 25, 50, 100]}
+                  count={sortedRows.length}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={(_e, next) => setPage(next)}
+                  onRowsPerPageChange={(e) => {
+                    setRowsPerPage(Number.parseInt(e.target.value, 10))
+                    setPage(0)
+                  }}
+                  labelRowsPerPage="שורות בעמוד:"
+                  labelDisplayedRows={({ from, to, count }) =>
+                    count === 0 ? '0 מתוך 0' : `${from}–${to} מתוך ${count}`
+                  }
+                />
+                </Box>
+              </Box>
             )}
           </Stack>
         </CardContent>
-      </Card>
+        </Card>
+      </Box>
 
-      <Dialog open={!!detail} onClose={() => setDetail(null)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          פנייה #{detail?.id}
-          <IconButton onClick={() => setDetail(null)} aria-label="סגור">
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+      <Dialog open={!!detail} onClose={() => !detailDeleting && setDetail(null)} maxWidth="md" fullWidth>
+        <CsDialogTitleWithMenu
+          heading={`פנייה #${detail?.id ?? ''}`}
+          onClose={() => !detailDeleting && setDetail(null)}
+          closeDisabled={detailDeleting}
+          onRequestDelete={() => void removeDetailJob()}
+          menuDisabled={detailDeleting}
+        />
         <DialogContent dividers>
           {detail ? (
             <Stack spacing={2} sx={{ pt: 1 }}>

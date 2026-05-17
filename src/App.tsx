@@ -12,6 +12,7 @@ import TicketsPage from './pages/TicketsPage'
 import TasksPage from './pages/TasksPage'
 import CitiesPage from './pages/CitiesPage'
 import CommissionsPage from './pages/CommissionsPage'
+import CompanyEmployeesPage from './pages/CompanyEmployeesPage'
 
 export default function App() {
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="/tasks/:tabSlug" element={<TasksPage />} />
               <Route path="/cities" element={<CitiesPage />} />
               <Route path="/commissions" element={<CommissionsPage />} />
+              <Route path="/company-employees" element={<CompanyEmployeesPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/jobs/today" replace />} />
           </Routes>
