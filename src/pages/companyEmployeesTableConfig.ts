@@ -2,17 +2,41 @@
  * הגדרות טבלת עובדי חברה — עמודות ברירת מחדל, סדר מועדף ותוויות בעברית (מחוץ לקומפוננטת העמוד).
  */
 
-/** ערכי תפקיד בעת יצירת עובד — נשלחים ל־API בשדה `role` (בצד השרת ממופים ל־`status`) */
+/** ערכי תפקיד — נשמרים בעמודה `role` */
 export const COMPANY_EMPLOYEE_ROLE_OPTIONS = [
   { value: 'מנהל', label: 'מנהל' },
   { value: 'מכירות', label: 'מכירות' },
   { value: 'שירות לקוחות', label: 'שירות לקוחות' },
+  { value: 'סושיאל', label: 'סושיאל' },
+  { value: 'קידום אתרים', label: 'קידום אתרים' },
+  { value: 'מתכנת', label: 'מתכנת' },
 ] as const
+
+/** סטטוס חשבון — נשמר ב־`status`; `active` נדרש להתחברות */
+export const COMPANY_EMPLOYEE_STATUS_OPTIONS = [
+  { value: 'active', label: 'פעיל' },
+  { value: 'inactive', label: 'לא פעיל' },
+] as const
+
+export function normalizeCompanyEmployeeStatus(raw: unknown): 'active' | 'inactive' {
+  const v = String(raw ?? '').trim().toLowerCase()
+  if (v === 'active' || v === 'פעיל') return 'active'
+  return 'inactive'
+}
+
+export function formatCompanyEmployeeStatusLabel(raw: unknown): string {
+  const normalized = normalizeCompanyEmployeeStatus(raw)
+  return (
+    COMPANY_EMPLOYEE_STATUS_OPTIONS.find((opt) => opt.value === normalized)?.label
+    ?? String(raw ?? '—')
+  )
+}
 
 export const COMPANY_EMPLOYEES_FALLBACK_COLUMNS = [
   'id',
   'username',
   'fullName',
+  'role',
   'status',
   'createdAt',
   'updatedAt',
@@ -51,7 +75,7 @@ const COLUMN_LABELS_HE: Readonly<Record<string, string>> = {
   username: 'שם משתמש',
   fullName: 'שם מלא',
   full_name: 'שם מלא',
-  role: 'תפקיד / הרשאה',
+  role: 'תפקיד',
   status: 'סטטוס',
   email: 'אימייל',
   phone: 'טלפון',

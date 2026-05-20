@@ -1162,7 +1162,7 @@ export default function TasksPage() {
               onChange={(e) => setForm((f) => ({ ...f, responsible: e.target.value || null }))}
               sx={{ flex: 1, ...TASK_EDITOR_RTL_FIELD_SX }}
               fullWidth
-              MenuProps={TASK_EDITOR_SELECT_MENU_PROPS}
+              slotProps={{ select: { MenuProps: TASK_EDITOR_SELECT_MENU_PROPS } }}
             >
               <MenuItem value="">
                 <em>ללא אחראי</em>
@@ -1180,7 +1180,7 @@ export default function TasksPage() {
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
               sx={{ flex: 1, ...TASK_EDITOR_RTL_FIELD_SX }}
               fullWidth
-              MenuProps={TASK_EDITOR_SELECT_MENU_PROPS}
+              slotProps={{ select: { MenuProps: TASK_EDITOR_SELECT_MENU_PROPS } }}
             >
               {TASK_STATUS_OPTIONS.map((s) => (
                 <MenuItem key={s} value={s}>{s}</MenuItem>
@@ -1193,7 +1193,7 @@ export default function TasksPage() {
               onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
               sx={{ flex: 1, ...TASK_EDITOR_RTL_FIELD_SX }}
               fullWidth
-              MenuProps={TASK_EDITOR_SELECT_MENU_PROPS}
+              slotProps={{ select: { MenuProps: TASK_EDITOR_SELECT_MENU_PROPS } }}
             >
               {TASK_PRIORITY_OPTIONS.map((p) => (
                 <MenuItem key={p} value={p}>{p}</MenuItem>
@@ -1207,7 +1207,7 @@ export default function TasksPage() {
             onChange={(e) => setForm((f) => ({ ...f, project_name: e.target.value }))}
             fullWidth
             sx={TASK_EDITOR_RTL_FIELD_SX}
-            MenuProps={TASK_EDITOR_SELECT_MENU_PROPS}
+            slotProps={{ select: { MenuProps: TASK_EDITOR_SELECT_MENU_PROPS } }}
           >
             {(() => {
               const pv = form.project_name || 'פרפקטו'
@@ -1513,7 +1513,7 @@ export default function TasksPage() {
                       בחירת קבצים
                     </Button>
                   </Box>
-                  <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary', direction: 'rtl', textAlign: 'right' }}>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary', direction: 'rtl', textAlign: 'right' }}>
                     תמונות, PDF ומסמכי אופיס · עד {TASK_UPLOAD_MAX_BATCH} קבצים בכל העלאה
                   </Typography>
                 </>

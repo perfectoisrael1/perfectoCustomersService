@@ -47,8 +47,11 @@ import {
 import {
   COMPANY_EMPLOYEES_FALLBACK_COLUMNS,
   COMPANY_EMPLOYEE_ROLE_OPTIONS,
+  COMPANY_EMPLOYEE_STATUS_OPTIONS,
   companyEmployeesColumnHeaderLabel,
   companyEmployeesColumnOrder,
+  formatCompanyEmployeeStatusLabel,
+  normalizeCompanyEmployeeStatus,
 } from './companyEmployeesTableConfig'
 
 /** רוחב מרבי לכל תא בטבלת עובדי חברה (כולל ריפוד — border-box) */
@@ -102,6 +105,12 @@ function isStructuredJsonField(originalRow: PerfectoCustomerServiceUser | null, 
   if (!originalRow || k === 'password') return false
   const v = (originalRow as Record<string, unknown>)[k]
   return v !== null && typeof v === 'object'
+}
+
+function formatTableCellValue(row: PerfectoCustomerServiceUser, col: string): string {
+  const raw = (row as Record<string, unknown>)[col]
+  if (col === 'status') return formatCompanyEmployeeStatusLabel(raw)
+  return formatCellValue(raw)
 }
 
 export default function CompanyEmployeesPage() {
@@ -170,7 +179,7 @@ export default function CompanyEmployeesPage() {
           ? columnsFromData
           : (Object.keys(r).filter((k) => !isSensitiveKey(k)) as string[])
       const blob = colsToSearch
-        .map((col) => formatCellValue((r as Record<string, unknown>)[col]))
+        .map((col) => formatTableCellValue(r, col))
         .join(' ')
         .toLowerCase()
       return blob.includes(q)
@@ -185,8 +194,8 @@ export default function CompanyEmployeesPage() {
     const col = sort.col
     const list = [...filtered]
     list.sort((a, b) => {
-      const va = formatCellValue((a as Record<string, unknown>)[col])
-      const vb = formatCellValue((b as Record<string, unknown>)[col])
+      const va = formatTableCellValue(a, col)
+      const vb = formatTableCellValue(b, col)
       const cmp = va.localeCompare(vb, 'he', { numeric: true })
       return sort.dir === 'asc' ? cmp : -cmp
     })
@@ -223,6 +232,10 @@ export default function CompanyEmployeesPage() {
     const next: Record<string, string> = {}
     for (const k of Object.keys(row)) {
       if (k === 'id' || isSensitiveKey(k)) continue
+      if (k === 'status') {
+        next[k] = normalizeCompanyEmployeeStatus((row as Record<string, unknown>)[k])
+        continue
+      }
       next[k] = formatCellValue((row as Record<string, unknown>)[k]).replace(/^—$/, '')
     }
     next.password = ''
@@ -336,7 +349,7 @@ export default function CompanyEmployeesPage() {
     editor === 'new'
       ? ['username', 'fullName', 'password', 'role']
       : companyEmployeesColumnOrder(
-        [...new Set([...columnsFromData.filter((c) => c !== 'id'), 'password'])].filter(
+        [...new Set([...columnsFromData.filter((c) => c !== 'id'), 'password', 'role'])].filter(
           (k) => !isSensitiveKey(k) || k === 'password',
         ),
       )
@@ -348,17 +361,31 @@ export default function CompanyEmployeesPage() {
     return companyEmployeesColumnHeaderLabel(k)
   }
 
-  /** שדות טקסט בדיאלוג עובד — תוכן בשורה מיושר לימין (RTL) */
+  /** שדות בדיאלוג עובד — תווית וטקסט מימין לשמאל (RTL) */
   const employeeDialogTextFieldSx = {
-    '& .MuiOutlinedInput-root': { direction: 'rtl' },
-    '& .MuiInputBase-input': { textAlign: 'right' },
-    '& .MuiInputBase-inputMultiline': { textAlign: 'right' },
-    '& .MuiFormHelperText-root': { textAlign: 'right' },
+    direction: 'rtl' as const,
+    '& .MuiInputLabel-root': {
+      right: 26,
+      left: 'auto',
+      transformOrigin: 'top right',
+    },
+    '& .MuiInputLabel-shrink': {
+      transform: 'translate(-0.5px, -9px) scale(0.75)',
+      transformOrigin: 'top right',
+    },
+    '& .MuiOutlinedInput-notchedOutline legend': {
+      marginInlineEnd: '2px',
+    },
+    '& .MuiOutlinedInput-root': { direction: 'rtl' as const },
+    '& .MuiInputBase-input': { textAlign: 'right', direction: 'rtl' as const },
+    '& .MuiInputBase-inputMultiline': { textAlign: 'right', direction: 'rtl' as const },
+    '& .MuiFormHelperText-root': { direction: 'rtl' as const, textAlign: 'right', marginRight: '2px' },
   } as const
 
   const employeeDialogSelectSx = {
     ...employeeDialogTextFieldSx,
-    '& .MuiSelect-select': { textAlign: 'right', direction: 'rtl' },
+    '& .MuiSelect-select': { textAlign: 'right', direction: 'rtl' as const },
+    '& .MuiSelect-icon': { left: 8, right: 'auto' },
   } as const
 
   const colSpan = tableColumns.length + 1
@@ -561,7 +588,7 @@ export default function CompanyEmployeesPage() {
                             {tableColumns.map((col) => (
                               <TableCell key={col} sx={companyEmployeesNarrowTableCellSx}>
                                 {(row as Record<string, unknown>)[col] !== undefined
-                                  ? formatCellValue((row as Record<string, unknown>)[col])
+                                  ? formatTableCellValue(row, col)
                                   : '—'}
                               </TableCell>
                             ))}
@@ -621,8 +648,14 @@ export default function CompanyEmployeesPage() {
               />
             ) : null}
             {sortedEditKeys.map((k) =>
-              editor === 'new' && k === 'role' ? (
-                <FormControl key={k} fullWidth size="small" required sx={employeeDialogSelectSx}>
+              k === 'role' ? (
+                <FormControl
+                  key={k}
+                  fullWidth
+                  size="small"
+                  required={editor === 'new'}
+                  sx={employeeDialogSelectSx}
+                >
                   <InputLabel id={`company-employee-field-${k}`}>{heLabelForKey(k)}</InputLabel>
                   <Select
                     labelId={`company-employee-field-${k}`}
@@ -632,12 +665,33 @@ export default function CompanyEmployeesPage() {
                     onChange={(e) =>
                       setFieldValues((prev) => ({ ...prev, [k]: String(e.target.value) }))
                     }
-                    displayEmpty
+                    displayEmpty={editor === 'new'}
                   >
-                    <MenuItem value="">
-                      <em>בחר תפקיד</em>
-                    </MenuItem>
+                    {editor === 'new' ? (
+                      <MenuItem value="">
+                        <em>בחר תפקיד</em>
+                      </MenuItem>
+                    ) : null}
                     {COMPANY_EMPLOYEE_ROLE_OPTIONS.map((opt) => (
+                      <MenuItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : k === 'status' ? (
+                <FormControl key={k} fullWidth size="small" required sx={employeeDialogSelectSx}>
+                  <InputLabel id={`company-employee-field-${k}`}>{heLabelForKey(k)}</InputLabel>
+                  <Select
+                    labelId={`company-employee-field-${k}`}
+                    id={`company-employee-field-${k}-select`}
+                    label={heLabelForKey(k)}
+                    value={fieldValues[k] ?? 'active'}
+                    onChange={(e) =>
+                      setFieldValues((prev) => ({ ...prev, [k]: String(e.target.value) }))
+                    }
+                  >
+                    {COMPANY_EMPLOYEE_STATUS_OPTIONS.map((opt) => (
                       <MenuItem key={opt.value} value={opt.value}>
                         {opt.label}
                       </MenuItem>

@@ -1,18 +1,35 @@
-import { useEffect, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
+import { Box, CircularProgress, CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/AppLayout'
-import LoginPage from './pages/LoginPage'
-import JobsPage from './pages/JobsPage'
-import AccountsPage from './pages/AccountsPage'
-import LeadsPage from './pages/LeadsPage'
-import TicketsPage from './pages/TicketsPage'
-import TasksPage from './pages/TasksPage'
-import CitiesPage from './pages/CitiesPage'
-import CommissionsPage from './pages/CommissionsPage'
-import CompanyEmployeesPage from './pages/CompanyEmployeesPage'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const JobsPage = lazy(() => import('./pages/JobsPage'))
+const AccountsPage = lazy(() => import('./pages/AccountsPage'))
+const LeadsPage = lazy(() => import('./pages/LeadsPage'))
+const TicketsPage = lazy(() => import('./pages/TicketsPage'))
+const TasksPage = lazy(() => import('./pages/TasksPage'))
+const CitiesPage = lazy(() => import('./pages/CitiesPage'))
+const CommissionsPage = lazy(() => import('./pages/CommissionsPage'))
+const CompanyEmployeesPage = lazy(() => import('./pages/CompanyEmployeesPage'))
+
+function PageLoadFallback() {
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: '#fafafa',
+      }}
+    >
+      <CircularProgress color="primary" />
+    </Box>
+  )
+}
 
 export default function App() {
   useEffect(() => {
@@ -61,30 +78,32 @@ export default function App() {
       <CssBaseline />
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              element={(
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              )}
-            >
-              <Route path="/" element={<Navigate to="/jobs/today" replace />} />
-              <Route path="/jobs" element={<Navigate to="/jobs/today" replace />} />
-              <Route path="/jobs/:segment" element={<JobsPage />} />
-              <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
-              <Route path="/accounts/:segment" element={<AccountsPage />} />
-              <Route path="/leads" element={<LeadsPage />} />
-              <Route path="/tickets" element={<TicketsPage />} />
-              <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
-              <Route path="/tasks/:tabSlug" element={<TasksPage />} />
-              <Route path="/cities" element={<CitiesPage />} />
-              <Route path="/commissions" element={<CommissionsPage />} />
-              <Route path="/company-employees" element={<CompanyEmployeesPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/jobs/today" replace />} />
-          </Routes>
+          <Suspense fallback={<PageLoadFallback />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                element={(
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                )}
+              >
+                <Route path="/" element={<Navigate to="/jobs/today" replace />} />
+                <Route path="/jobs" element={<Navigate to="/jobs/today" replace />} />
+                <Route path="/jobs/:segment" element={<JobsPage />} />
+                <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
+                <Route path="/accounts/:segment" element={<AccountsPage />} />
+                <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/tickets" element={<TicketsPage />} />
+                <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
+                <Route path="/tasks/:tabSlug" element={<TasksPage />} />
+                <Route path="/cities" element={<CitiesPage />} />
+                <Route path="/commissions" element={<CommissionsPage />} />
+                <Route path="/company-employees" element={<CompanyEmployeesPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/jobs/today" replace />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>
