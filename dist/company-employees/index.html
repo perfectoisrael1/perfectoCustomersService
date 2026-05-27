@@ -1,19 +1,16 @@
 <!doctype html>
 <html lang="he" dir="rtl">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>מעביר…</title>
-    <script>
-      try {
-        var p = location.pathname || ''
-        if (p.endsWith('/') && p.length > 1) p = p.slice(0, -1)
-        if (p && p.startsWith('/') && !p.startsWith('//') && p.indexOf('..') === -1) {
-          sessionStorage.setItem('perfectoSpaRedirect', p)
-        }
-      } catch (e) {}
-      location.replace('/')
-    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>פרפקטו שירות לקוחות</title>
+    <script type="module" crossorigin src="/assets/index-CNSFRY6f.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/csApi-Bj8jaoJI.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-OE4NN4TA-CB3yt0LN.js">
+    <link rel="modulepreload" crossorigin href="/assets/headerLayout-JhajwovD.js">
+    <link rel="modulepreload" crossorigin href="/assets/useAuth-DJPsmhfG.js">
   </head>
-  <body></body>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

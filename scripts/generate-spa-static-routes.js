@@ -1,41 +1,15 @@
 /**
- * Creates public/<route>/index.html stubs so Apache can serve a real file when
- * mod_rewrite / SPA fallback is unreliable. Also updates public/.htaccess trailing-slash rules.
- *
- * Keep ROUTES in sync with src/App.tsx route paths.
+ * Creates public/<route>/index.html stubs + updates .htaccess.
+ * Routes are auto-collected from src — see scripts/lib/collect-spa-routes.mjs
  */
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { HTACCESS_TRAILING_SLASH_ONLY, ROUTES, SPA_REDIRECT_STORAGE_KEY } from './spa-routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
 const publicDir = path.join(root, 'public')
-
-const STORAGE_KEY = 'perfectoSpaRedirect'
-
-/** Client routes that must survive hard refresh (Ctrl+R) on static hosting */
-const ROUTES = [
-  'login',
-  'jobs',
-  'jobs/today',
-  'jobs/exceptions',
-  'jobs/search',
-  'jobs/leave',
-  'accounts',
-  'accounts/businesses',
-  'accounts/today',
-  'leads',
-  'tickets',
-  'tasks',
-  'tasks/my-tasks',
-  'tasks/all',
-  'tasks/urgent',
-  'tasks/done',
-  'cities',
-  'commissions',
-  'company-employees',
-]
 
 const STATIC_HTML = `<!doctype html>
 <html lang="he" dir="rtl">
@@ -48,7 +22,7 @@ const STATIC_HTML = `<!doctype html>
         var p = location.pathname || ''
         if (p.endsWith('/') && p.length > 1) p = p.slice(0, -1)
         if (p && p.startsWith('/') && !p.startsWith('//') && p.indexOf('..') === -1) {
-          sessionStorage.setItem('${STORAGE_KEY}', p)
+          sessionStorage.setItem('${SPA_REDIRECT_STORAGE_KEY}', p)
         }
       } catch (e) {}
       location.replace('/')
@@ -68,14 +42,14 @@ function writeStubs() {
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, 'index.html'), STATIC_HTML, 'utf8')
   }
-  console.log(`generate-spa-static-routes: wrote ${ROUTES.length} index.html stubs under public/`)
+  console.log(`generate-spa-static-routes: wrote ${ROUTES.length} stubs under public/`)
 }
 
 function injectHtaccessRules() {
   const htPath = path.join(publicDir, '.htaccess')
   let content = fs.readFileSync(htPath, 'utf8')
 
-  const sorted = [...ROUTES].sort((a, b) => b.length - a.length)
+  const sorted = [...ROUTES, ...HTACCESS_TRAILING_SLASH_ONLY].sort((a, b) => b.length - a.length)
   const block = sorted.map((r) => `RewriteRule ^${r}$ /${r}/ [R=301,L]`).join('\n')
 
   const injected = `${MARK_START}\n${block}\n${MARK_END}`
@@ -89,8 +63,10 @@ function injectHtaccessRules() {
   }
 
   fs.writeFileSync(htPath, content, 'utf8')
-  console.log('generate-spa-static-routes: updated .htaccess trailing-slash rules')
+  console.log('generate-spa-static-routes: updated .htaccess')
 }
+
+console.log(`generate-spa-static-routes: ${ROUTES.length} routes (auto-collected from source)`)
 
 writeStubs()
 injectHtaccessRules()

@@ -13,7 +13,6 @@ import {
   IconButton,
   FormControl,
   InputAdornment,
-  InputLabel,
   MenuItem,
   Select,
   Stack,
@@ -45,13 +44,15 @@ import {
   type PerfectoCustomerServiceUser,
 } from '../api/csApi'
 import {
+  buildCompanyEmployeeRoleOptions,
   COMPANY_EMPLOYEES_FALLBACK_COLUMNS,
-  COMPANY_EMPLOYEE_ROLE_OPTIONS,
   COMPANY_EMPLOYEE_STATUS_OPTIONS,
   companyEmployeesColumnHeaderLabel,
   companyEmployeesColumnOrder,
   formatCompanyEmployeeStatusLabel,
+  loadCustomEmployeeRoles,
   normalizeCompanyEmployeeStatus,
+  saveCustomEmployeeRoles,
 } from './companyEmployeesTableConfig'
 
 /** רוחב מרבי לכל תא בטבלת עובדי חברה (כולל ריפוד — border-box) */
@@ -123,6 +124,9 @@ export default function CompanyEmployeesPage() {
   const [saving, setSaving] = useState(false)
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [originalRow, setOriginalRow] = useState<PerfectoCustomerServiceUser | null>(null)
+  const [customRoleOptions, setCustomRoleOptions] = useState<string[]>(() => loadCustomEmployeeRoles())
+  const [addRoleDialogOpen, setAddRoleDialogOpen] = useState(false)
+  const [newRoleName, setNewRoleName] = useState('')
 
   const [sort, setSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'id', dir: 'asc' })
   const [page, setPage] = useState(0)
@@ -207,6 +211,24 @@ export default function CompanyEmployeesPage() {
     return sortedRows.slice(start, start + rowsPerPage)
   }, [sortedRows, page, rowsPerPage])
 
+  const rolesFromRows = useMemo(
+    () =>
+      rows
+        .map((r) => String((r as Record<string, unknown>).role ?? '').trim())
+        .filter(Boolean),
+    [rows],
+  )
+
+  const roleOptions = useMemo(
+    () =>
+      buildCompanyEmployeeRoleOptions(
+        customRoleOptions,
+        rolesFromRows,
+        fieldValues.role,
+      ),
+    [customRoleOptions, rolesFromRows, fieldValues.role],
+  )
+
   const onSortColumn = useCallback(
     (col: string) => {
       setSort((prev) =>
@@ -247,6 +269,30 @@ export default function CompanyEmployeesPage() {
     setEditor(null)
     setFieldValues({})
     setOriginalRow(null)
+    setAddRoleDialogOpen(false)
+    setNewRoleName('')
+  }
+
+  const openAddRoleDialog = () => {
+    setNewRoleName('')
+    setAddRoleDialogOpen(true)
+  }
+
+  const closeAddRoleDialog = () => {
+    setAddRoleDialogOpen(false)
+    setNewRoleName('')
+  }
+
+  const confirmAddRole = () => {
+    const trimmed = newRoleName.trim()
+    if (!trimmed) return
+    setCustomRoleOptions((prev) => {
+      const next = prev.includes(trimmed) ? prev : [...prev, trimmed]
+      saveCustomEmployeeRoles(next)
+      return next
+    })
+    setFieldValues((prev) => ({ ...prev, role: trimmed }))
+    closeAddRoleDialog()
   }
 
   const buildPatchBody = (): Record<string, unknown> => {
@@ -361,23 +407,25 @@ export default function CompanyEmployeesPage() {
     return companyEmployeesColumnHeaderLabel(k)
   }
 
-  /** שדות בדיאלוג עובד — תווית וטקסט מימין לשמאל (RTL) */
+  const renderSelectPlaceholder = (value: string, placeholder: string) => {
+    if (value) return value
+    return (
+      <Box component="span" sx={{ color: 'text.secondary' }}>
+        {placeholder}
+      </Box>
+    )
+  }
+
+  /** שדות בדיאלוג עובד — placeholder וטקסט מימין לשמאל (RTL) */
   const employeeDialogTextFieldSx = {
     direction: 'rtl' as const,
-    '& .MuiInputLabel-root': {
-      right: 26,
-      left: 'auto',
-      transformOrigin: 'top right',
-    },
-    '& .MuiInputLabel-shrink': {
-      transform: 'translate(-0.5px, -9px) scale(0.75)',
-      transformOrigin: 'top right',
-    },
-    '& .MuiOutlinedInput-notchedOutline legend': {
-      marginInlineEnd: '2px',
-    },
     '& .MuiOutlinedInput-root': { direction: 'rtl' as const },
     '& .MuiInputBase-input': { textAlign: 'right', direction: 'rtl' as const },
+    '& .MuiInputBase-input::placeholder': {
+      textAlign: 'right',
+      opacity: 1,
+      color: 'text.secondary',
+    },
     '& .MuiInputBase-inputMultiline': { textAlign: 'right', direction: 'rtl' as const },
     '& .MuiFormHelperText-root': { direction: 'rtl' as const, textAlign: 'right', marginRight: '2px' },
   } as const
@@ -638,7 +686,7 @@ export default function CompanyEmployeesPage() {
           <Stack spacing={2} sx={{ mt: 1, textAlign: 'right' }}>
             {editor !== 'new' && editor ? (
               <TextField
-                label="מזהה"
+                placeholder="מזהה"
                 value={String(editor.id)}
                 disabled
                 size="small"
@@ -649,47 +697,68 @@ export default function CompanyEmployeesPage() {
             ) : null}
             {sortedEditKeys.map((k) =>
               k === 'role' ? (
-                <FormControl
+                <Stack
                   key={k}
-                  fullWidth
-                  size="small"
-                  required={editor === 'new'}
-                  sx={employeeDialogSelectSx}
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  sx={{ direction: 'rtl', width: '100%' }}
                 >
-                  <InputLabel id={`company-employee-field-${k}`}>{heLabelForKey(k)}</InputLabel>
-                  <Select
-                    labelId={`company-employee-field-${k}`}
-                    id={`company-employee-field-${k}-select`}
-                    label={heLabelForKey(k)}
-                    value={fieldValues[k] ?? ''}
-                    onChange={(e) =>
-                      setFieldValues((prev) => ({ ...prev, [k]: String(e.target.value) }))
-                    }
-                    displayEmpty={editor === 'new'}
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    required={editor === 'new'}
+                    sx={employeeDialogSelectSx}
                   >
-                    {editor === 'new' ? (
-                      <MenuItem value="">
-                        <em>בחר תפקיד</em>
-                      </MenuItem>
-                    ) : null}
-                    {COMPANY_EMPLOYEE_ROLE_OPTIONS.map((opt) => (
-                      <MenuItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    <Select
+                      id={`company-employee-field-${k}-select`}
+                      value={fieldValues[k] ?? ''}
+                      onChange={(e) =>
+                        setFieldValues((prev) => ({ ...prev, [k]: String(e.target.value) }))
+                      }
+                      displayEmpty
+                      renderValue={(selected) =>
+                        renderSelectPlaceholder(String(selected ?? ''), heLabelForKey(k))
+                      }
+                    >
+                      {roleOptions.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <IconButton
+                    onClick={openAddRoleDialog}
+                    aria-label="הוספת תפקיד"
+                    sx={{
+                      flexShrink: 0,
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 2,
+                      '&:hover': { backgroundColor: 'primary.dark' },
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
               ) : k === 'status' ? (
                 <FormControl key={k} fullWidth size="small" required sx={employeeDialogSelectSx}>
-                  <InputLabel id={`company-employee-field-${k}`}>{heLabelForKey(k)}</InputLabel>
                   <Select
-                    labelId={`company-employee-field-${k}`}
                     id={`company-employee-field-${k}-select`}
-                    label={heLabelForKey(k)}
                     value={fieldValues[k] ?? 'active'}
                     onChange={(e) =>
                       setFieldValues((prev) => ({ ...prev, [k]: String(e.target.value) }))
                     }
+                    displayEmpty
+                    renderValue={(selected) => {
+                      const label = COMPANY_EMPLOYEE_STATUS_OPTIONS.find(
+                        (opt) => opt.value === selected,
+                      )?.label
+                      return label ?? renderSelectPlaceholder(String(selected ?? ''), heLabelForKey(k))
+                    }}
                   >
                     {COMPANY_EMPLOYEE_STATUS_OPTIONS.map((opt) => (
                       <MenuItem key={opt.value} value={opt.value}>
@@ -701,7 +770,7 @@ export default function CompanyEmployeesPage() {
               ) : (
                 <TextField
                   key={k}
-                  label={heLabelForKey(k)}
+                  placeholder={heLabelForKey(k)}
                   value={fieldValues[k] ?? ''}
                   onChange={(e) => setFieldValues((prev) => ({ ...prev, [k]: e.target.value }))}
                   size="small"
@@ -721,6 +790,44 @@ export default function CompanyEmployeesPage() {
           <Button onClick={() => !saving && closeDialog()}>ביטול</Button>
           <Button variant="contained" onClick={() => void save()} disabled={saving}>
             {saving ? 'שומר…' : 'שמירה'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={addRoleDialogOpen}
+        onClose={() => !saving && closeAddRoleDialog()}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ direction: 'rtl', textAlign: 'right' }}>הוספת תפקיד</DialogTitle>
+        <DialogContent sx={{ direction: 'rtl' }}>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            placeholder="שם תפקיד"
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                confirmAddRole()
+              }
+            }}
+            sx={{ ...employeeDialogTextFieldSx, mt: 1 }}
+            slotProps={{ htmlInput: { dir: 'rtl' } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1, direction: 'rtl' }}>
+          <Button onClick={closeAddRoleDialog}>ביטול</Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={confirmAddRole}
+            disabled={!newRoleName.trim()}
+          >
+            הוספה
           </Button>
         </DialogActions>
       </Dialog>

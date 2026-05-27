@@ -12,6 +12,60 @@ export const COMPANY_EMPLOYEE_ROLE_OPTIONS = [
   { value: 'מתכנת', label: 'מתכנת' },
 ] as const
 
+export type CompanyEmployeeRoleOption = { value: string; label: string }
+
+export const COMPANY_EMPLOYEE_CUSTOM_ROLES_STORAGE_KEY = 'perfecto-cs-custom-employee-roles'
+
+export function loadCustomEmployeeRoles(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(COMPANY_EMPLOYEE_CUSTOM_ROLES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((v) => String(v ?? '').trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+export function saveCustomEmployeeRoles(roles: string[]): void {
+  if (typeof window === 'undefined') return
+  const unique = Array.from(
+    new Set(roles.map((r) => r.trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, 'he'))
+  window.localStorage.setItem(
+    COMPANY_EMPLOYEE_CUSTOM_ROLES_STORAGE_KEY,
+    JSON.stringify(unique),
+  )
+}
+
+/** מיזוג תפקידים מוגדרים, מותאמים אישית, מהטבלה והערך הנוכחי */
+export function buildCompanyEmployeeRoleOptions(
+  customRoles: string[],
+  existingFromRows: string[] = [],
+  currentValue?: string,
+): CompanyEmployeeRoleOption[] {
+  const seen = new Set<string>()
+  const ordered: CompanyEmployeeRoleOption[] = []
+
+  const add = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    ordered.push({ value: trimmed, label: trimmed })
+  }
+
+  for (const opt of COMPANY_EMPLOYEE_ROLE_OPTIONS) add(opt.value)
+  for (const role of customRoles) add(role)
+  for (const role of existingFromRows) add(role)
+  if (currentValue) add(currentValue)
+
+  return ordered
+}
+
 /** סטטוס חשבון — נשמר ב־`status`; `active` נדרש להתחברות */
 export const COMPANY_EMPLOYEE_STATUS_OPTIONS = [
   { value: 'active', label: 'פעיל' },

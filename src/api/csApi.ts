@@ -460,6 +460,13 @@ export async function getServices() {
   return csFetch<Service[]>('/customer-service/catalog/services')
 }
 
+export async function patchServicePrice(id: number, price: number) {
+  return csFetch<Service>(`/customer-service/catalog/services/${id}`, {
+    method: 'PATCH',
+    body: { price },
+  })
+}
+
 export type PerfectoCustomerServiceUser = Record<string, unknown> & { id: number }
 
 const PERFECTO_CS_USERS_PATH = '/customer-service/perfecto-customer-service-users'
