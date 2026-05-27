@@ -8,8 +8,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogContent,
   IconButton,
   InputAdornment,
   Stack,
@@ -22,7 +20,6 @@ import {
   TableSortLabel,
   Tabs,
   TextField,
-  Typography,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
@@ -33,8 +30,18 @@ import {
   isCreatedTodayJerusalem,
   mapAccountStatusLabel,
 } from '../lib/caliberUi'
-import { getAccounts, deleteAccount, type Account } from '../api/csApi'
-import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import {
+  getAccounts,
+  deleteAccount,
+  patchAccount,
+  getCities,
+  getServices,
+  type Account,
+  type AccountInput,
+  type City,
+  type Service,
+} from '../api/csApi'
+import AccountEditDialog from '../components/AccountEditDialog'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
@@ -95,8 +102,11 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [detail, setDetail] = useState<Account | null>(null)
-  const [detailDeleting, setDetailDeleting] = useState(false)
+  const [editor, setEditor] = useState<Account | null>(null)
+  const [form, setForm] = useState<AccountInput>({})
+  const [saving, setSaving] = useState(false)
+  const [catalogServices, setCatalogServices] = useState<Service[]>([])
+  const [catalogCities, setCatalogCities] = useState<City[]>([])
 
   const [sort, setSort] = useState<{ col: AccountsSortColumn; dir: 'asc' | 'desc' }>({
     col: 'accountName',
@@ -120,6 +130,26 @@ export default function AccountsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [svc, cty] = await Promise.all([getServices(), getCities()])
+        if (cancelled) return
+        setCatalogServices(Array.isArray(svc) ? svc : [])
+        setCatalogCities(Array.isArray(cty) ? cty : [])
+      } catch {
+        if (!cancelled) {
+          setCatalogServices([])
+          setCatalogCities([])
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const tabRows = useMemo(() => {
     if (tab === 'today') return rows.filter((r) => isCreatedTodayJerusalem(r.createdAt))
@@ -181,19 +211,67 @@ export default function AccountsPage() {
     [rows],
   )
 
-  const removeDetailAccount = async () => {
-    if (!detail) return
-    if (!window.confirm('האם אתה בטוח?')) return
-    setDetailDeleting(true)
+  const openEdit = (row: Account) => {
+    setForm({
+      accountName: row.accountName,
+      phoneNumber: row.phoneNumber,
+      businessName: row.businessName,
+      email: row.email,
+      about: row.about,
+      certificateNumber: row.certificateNumber,
+      specialtiesCategory: row.specialtiesCategory,
+      specialties: row.specialties,
+      workingAreas: row.workingAreas,
+      workingHours:
+        row.workingHours == null
+          ? null
+          : typeof row.workingHours === 'string'
+            ? row.workingHours
+            : JSON.stringify(row.workingHours),
+      perfectoStatus: row.perfectoStatus,
+      availability:
+        row.availability == null || row.availability === ''
+          ? null
+          : Number.parseInt(String(row.availability), 10),
+      credits: row.credits,
+      payPerLead: row.payPerLead,
+      yearsOfExperience:
+        row.yearsOfExperience == null || row.yearsOfExperience === ''
+          ? null
+          : Number.parseInt(String(row.yearsOfExperience), 10),
+      slug: row.slug,
+    })
+    setEditor(row)
+  }
+
+  const handleSave = async () => {
+    if (!editor) return
+    setSaving(true)
     setError(null)
     try {
-      await deleteAccount(detail.id)
-      setDetail(null)
+      await patchAccount(editor.id, form)
+      setEditor(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בשמירה')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!editor) return
+    if (!window.confirm('האם אתה בטוח?')) return
+    setSaving(true)
+    setError(null)
+    try {
+      await deleteAccount(editor.id)
+      setEditor(null)
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה במחיקת הספק')
     } finally {
-      setDetailDeleting(false)
+      setSaving(false)
     }
   }
 
@@ -427,7 +505,7 @@ export default function AccountsPage() {
                               key={row.id}
                               hover
                               sx={{ cursor: 'pointer' }}
-                              onClick={() => setDetail(row)}
+                              onClick={() => openEdit(row)}
                             >
                               <TableCell title={row.accountName}>{row.accountName}</TableCell>
                               <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
@@ -483,48 +561,18 @@ export default function AccountsPage() {
         </Card>
       </Box>
 
-      <Dialog open={!!detail} onClose={() => !detailDeleting && setDetail(null)} maxWidth="md" fullWidth>
-        <CsDialogTitleWithMenu
-          heading={detail?.accountName ?? ''}
-          onClose={() => !detailDeleting && setDetail(null)}
-          closeDisabled={detailDeleting}
-          onRequestDelete={() => void removeDetailAccount()}
-          menuDisabled={detailDeleting}
-        />
-        <DialogContent dividers>
-          {detail ? (
-            <Stack spacing={1.5} sx={{ pt: 1 }}>
-              <Typography variant="body2">
-                <strong>טלפון:</strong> {formatCsPhoneDisplay(detail.phoneNumber)}
-              </Typography>
-              <Typography variant="body2">
-                <strong>אימייל:</strong> {detail.email || '—'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>עסק:</strong> {detail.businessName || '—'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>תחום:</strong> {detail.specialtiesCategory || '—'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>אזורי עבודה:</strong> {detail.workingAreas || '—'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>סטטוס:</strong> {mapAccountStatusLabel(detail.perfectoStatus || detail.accountStatus)}
-              </Typography>
-              <Typography variant="body2">
-                <strong>קרדיטים:</strong> {detail.credits ?? '—'}
-              </Typography>
-              <Typography variant="body2">
-                <strong>אודות:</strong> {detail.about || '—'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                נוצר: {detail.createdAt}
-              </Typography>
-            </Stack>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <AccountEditDialog
+        open={!!editor}
+        account={editor}
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        services={catalogServices}
+        cities={catalogCities}
+        onClose={() => !saving && setEditor(null)}
+        onSave={() => void handleSave()}
+        onDelete={() => void handleDelete()}
+      />
     </>
   )
 }

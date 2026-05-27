@@ -1,9 +1,36 @@
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  DirectoryIndex index.html
-  RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
-</IfModule>
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+
+# BEGIN SPA_STATIC_TRAILING_SLASH
+RewriteRule ^accounts/businesses$ /accounts/businesses/ [R=301,L]
+RewriteRule ^company-employees$ /company-employees/ [R=301,L]
+RewriteRule ^jobs/exceptions$ /jobs/exceptions/ [R=301,L]
+RewriteRule ^accounts/today$ /accounts/today/ [R=301,L]
+RewriteRule ^tasks/my-tasks$ /tasks/my-tasks/ [R=301,L]
+RewriteRule ^tasks/urgent$ /tasks/urgent/ [R=301,L]
+RewriteRule ^jobs/search$ /jobs/search/ [R=301,L]
+RewriteRule ^commissions$ /commissions/ [R=301,L]
+RewriteRule ^jobs/today$ /jobs/today/ [R=301,L]
+RewriteRule ^jobs/leave$ /jobs/leave/ [R=301,L]
+RewriteRule ^tasks/done$ /tasks/done/ [R=301,L]
+RewriteRule ^tasks/all$ /tasks/all/ [R=301,L]
+RewriteRule ^accounts$ /accounts/ [R=301,L]
+RewriteRule ^tickets$ /tickets/ [R=301,L]
+RewriteRule ^cities$ /cities/ [R=301,L]
+RewriteRule ^login$ /login/ [R=301,L]
+RewriteRule ^leads$ /leads/ [R=301,L]
+RewriteRule ^tasks$ /tasks/ [R=301,L]
+RewriteRule ^jobs$ /jobs/ [R=301,L]
+# END SPA_STATIC_TRAILING_SLASH
+
+# Serve existing files and directories before SPA fallback
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# SPA fallback: route all other requests to index.html
+RewriteRule ^(.*)$ /index.html [L,QSA]
+
+# Fallback when rewrites are bypassed: still load SPA so client routes work on refresh
+ErrorDocument 404 /index.html

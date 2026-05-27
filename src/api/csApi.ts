@@ -288,6 +288,29 @@ export async function deleteAccount(id: number) {
   return csFetch<void>(`/customer-service/accounts/${id}`, { method: 'DELETE' })
 }
 
+export type AccountInput = Partial<{
+  accountName: string
+  phoneNumber: string
+  businessName: string | null
+  email: string | null
+  about: string | null
+  certificateNumber: string | null
+  specialtiesCategory: string | null
+  specialties: string | null
+  workingAreas: string | null
+  workingHours: string | null
+  perfectoStatus: string | null
+  availability: number | null
+  credits: number | null
+  payPerLead: number | null
+  yearsOfExperience: number | null
+  slug: string | null
+}>
+
+export async function patchAccount(id: number, body: AccountInput) {
+  return csFetch<Account>(`/customer-service/accounts/${id}`, { method: 'PATCH', body })
+}
+
 export async function getLeads(created?: 'today') {
   if (created === 'today') {
     const params = new URLSearchParams()

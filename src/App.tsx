@@ -4,6 +4,7 @@ import { Box, CircularProgress, CssBaseline, ThemeProvider, createTheme } from '
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/AppLayout'
+import SpaRedirectBootstrap from './components/SpaRedirectBootstrap'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const JobsPage = lazy(() => import('./pages/JobsPage'))
@@ -78,6 +79,7 @@ export default function App() {
       <CssBaseline />
       <AuthProvider>
         <BrowserRouter>
+          <SpaRedirectBootstrap />
           <Suspense fallback={<PageLoadFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
