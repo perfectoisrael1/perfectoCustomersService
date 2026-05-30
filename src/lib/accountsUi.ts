@@ -63,6 +63,54 @@ export function stringifyJsonStringArray(items: string[]): string | null {
   return clean.length ? JSON.stringify(clean) : null
 }
 
+function normalizeMatchToken(value: string): string {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function scalarContainsNeedle(raw: string | null | undefined, needle: string): boolean {
+  const haystack = normalizeMatchToken(raw ?? '')
+  const wanted = normalizeMatchToken(needle)
+  if (!haystack || !wanted) return false
+  return haystack === wanted || haystack.includes(wanted) || wanted.includes(haystack)
+}
+
+function arrayContainsNeedle(items: string[], needle: string): boolean {
+  const wanted = normalizeMatchToken(needle)
+  if (!wanted) return false
+  return items.some((item) => scalarContainsNeedle(item, wanted))
+}
+
+/** האם לספק מוגדרת עיר העבודה (כמו בהתאמת וובהוק הפניות) */
+export function accountMatchesCity(
+  workingAreas: string | null | undefined,
+  cityName: string,
+): boolean {
+  return arrayContainsNeedle(parseJsonStringArrayField(workingAreas), cityName)
+}
+
+/** האם לספק מוגדרת לפחות עיר אחת באזור */
+export function accountMatchesAnyCity(
+  workingAreas: string | null | undefined,
+  cityNames: string[],
+): boolean {
+  const areas = parseJsonStringArrayField(workingAreas)
+  return cityNames.some((city) => arrayContainsNeedle(areas, city))
+}
+
+/** האם לספק מוגדר התחום (שירות / קטגוריה / תחום ראשי) */
+export function accountMatchesDomain(
+  specialties: string | null | undefined,
+  specialtiesCategory: string | null | undefined,
+  domain: string,
+): boolean {
+  const list = parseJsonStringArrayField(specialties)
+  return (
+    arrayContainsNeedle(list, domain) || scalarContainsNeedle(specialtiesCategory, domain)
+  )
+}
+
 export const accountFieldInputSx = {
   mt: 0.5,
   '& .MuiOutlinedInput-root': {

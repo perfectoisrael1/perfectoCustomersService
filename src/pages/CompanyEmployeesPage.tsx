@@ -78,13 +78,11 @@ const companyEmployeesTableSortLabelSx = {
   },
 } as const
 
-/** עמודות שלא להציג (סיסמה / גיבוב) ולא להעביר בטופס ברירת מחדל */
+/** עמודות שלא להציג (גיבוב / טוקנים) — סיסמה מוצגת במפורש */
 function isSensitiveKey(k: string): boolean {
   const lower = k.toLowerCase()
   return (
-    lower === 'password'
-    || lower.includes('password')
-    || lower.includes('hash')
+    lower.includes('hash')
     || lower.endsWith('_hash')
     || lower === 'jwt'
     || lower === 'token'
@@ -258,9 +256,16 @@ export default function CompanyEmployeesPage() {
         next[k] = normalizeCompanyEmployeeStatus((row as Record<string, unknown>)[k])
         continue
       }
+      if (k === 'password') {
+        const pw = (row as Record<string, unknown>).password
+        next.password = pw != null && String(pw) !== '—' ? String(pw) : ''
+        continue
+      }
       next[k] = formatCellValue((row as Record<string, unknown>)[k]).replace(/^—$/, '')
     }
-    next.password = ''
+    if (!('password' in next)) {
+      next.password = ''
+    }
     setFieldValues(next)
     setEditor(row)
   }
@@ -402,7 +407,7 @@ export default function CompanyEmployeesPage() {
 
   const heLabelForKey = (k: string) => {
     if (k === 'password') {
-      return editor === 'new' ? 'סיסמה' : 'סיסמה חדשה (ריק = ללא שינוי)'
+      return 'סיסמה'
     }
     return companyEmployeesColumnHeaderLabel(k)
   }
@@ -775,7 +780,7 @@ export default function CompanyEmployeesPage() {
                   onChange={(e) => setFieldValues((prev) => ({ ...prev, [k]: e.target.value }))}
                   size="small"
                   fullWidth
-                  type={k === 'password' ? 'password' : 'text'}
+                  type="text"
                   multiline={isStructuredJsonField(originalRow, k)}
                   minRows={isStructuredJsonField(originalRow, k) ? 3 : 1}
                   helperText={isStructuredJsonField(originalRow, k) ? 'JSON' : undefined}

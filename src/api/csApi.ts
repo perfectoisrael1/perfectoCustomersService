@@ -5,7 +5,7 @@ const DEFAULT_CLOUD_API_BASE =
 
 export const TOKEN_KEY = 'perfectoCustomerServiceToken'
 
-export type User = { id: number; fullName: string; username: string }
+export type User = { id: number; fullName: string; username: string; role?: string | null }
 
 export type Job = {
   id: number
@@ -47,6 +47,7 @@ export type Account = {
   slug: string | null
   availability: string | null
   credits: number | null
+  password?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -100,6 +101,15 @@ export type Task = {
   execution_date: string | null
   file_urls: string | null
   created_at: string
+}
+
+export type Domain = {
+  id: number
+  domainName: string
+  status: string | null
+  purchaseDate: string | null
+  renewalDate: string | null
+  isCompleted: boolean
 }
 
 export type City = {
@@ -208,7 +218,14 @@ export async function csFetch<T>(
   }
 
   if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+
+  const text = await res.text()
+  if (!text.trim()) return null as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error('תגובה לא תקינה מהשרת')
+  }
 }
 
 export async function loginRequest(username: string, password: string) {
@@ -305,6 +322,7 @@ export type AccountInput = Partial<{
   payPerLead: number | null
   yearsOfExperience: number | null
   slug: string | null
+  password?: string | null
 }>
 
 export async function patchAccount(id: number, body: AccountInput) {
@@ -421,6 +439,32 @@ export async function deleteTask(id: number) {
   return csFetch<void>(`/customer-service/tasks/${id}`, { method: 'DELETE' })
 }
 
+export async function getDomains() {
+  return csFetch<Domain[]>('/customer-service/domains')
+}
+
+export type DomainInput = Partial<{
+  domainName: string
+  status: string | null
+  purchaseDate: string | null
+  renewalDate: string | null
+  isCompleted: boolean
+}>
+
+export async function createDomain(body: DomainInput) {
+  return csFetch<Domain>('/customer-service/domains', { method: 'POST', body })
+}
+
+export async function patchDomain(id: number, body: DomainInput) {
+  return csFetch<Domain>(`/customer-service/domains/${id}`, { method: 'PATCH', body })
+}
+
+export async function deleteDomain(id: number) {
+  return csFetch<{ ok: boolean; id: number }>(`/customer-service/domains/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 /**
  * multipart — מחזיר URL ציבורי לכל קובץ (כמו ייקירוס /tasks/:id/upload-files).
  */
@@ -493,4 +537,22 @@ export async function patchPerfectoCustomerServiceUser(
 
 export async function deletePerfectoCustomerServiceUser(id: number) {
   return csFetch<{ ok?: boolean } | void>(`${PERFECTO_CS_USERS_PATH}/${id}`, { method: 'DELETE' })
+}
+
+function payslipToken(token?: string | null): string {
+  const t = token ?? getStoredToken()
+  if (!t) throw new Error('Missing token')
+  return t
+}
+
+export async function listMyPayslips(token?: string | null) {
+  return csFetch<{ urls: string[] }>(`${PERFECTO_CS_USERS_PATH}/my-payslips`, {
+    token: payslipToken(token),
+  })
+}
+
+export async function listUserPayslips(token: string | null | undefined, userId: number) {
+  return csFetch<{ urls: string[] }>(`${PERFECTO_CS_USERS_PATH}/${userId}/payslips`, {
+    token: payslipToken(token),
+  })
 }

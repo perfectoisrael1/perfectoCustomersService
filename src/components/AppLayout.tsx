@@ -19,7 +19,10 @@ import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/heade
 
 const drawerWidth = 260
 
-const links: { to: string; prefix: string; label: string }[] = [
+type NavLink = { to: string; prefix: string; label: string }
+
+const mainLinks: NavLink[] = [
+  { to: '/personal-area', prefix: '/personal-area', label: 'אזור אישי' },
   { to: '/jobs/today', prefix: '/jobs', label: 'פניות' },
   { to: '/accounts/businesses', prefix: '/accounts', label: 'ספקים' },
   { to: '/leads', prefix: '/leads', label: 'לידים' },
@@ -28,12 +31,60 @@ const links: { to: string; prefix: string; label: string }[] = [
   { to: '/cities', prefix: '/cities', label: 'אזורים וערים' },
   { to: '/commissions', prefix: '/commissions', label: 'מחירון עמלות' },
   { to: '/company-employees', prefix: '/company-employees', label: 'עובדי חברה' },
+  { to: '/domains', prefix: '/domains', label: 'דומיינים' },
 ]
+
+const bottomLinks: NavLink[] = [
+  { to: '/dashboards/leads', prefix: '/dashboards', label: 'דשבורדים' },
+]
+
+const allLinks = [...mainLinks, ...bottomLinks]
 
 function pageTitleForPath(pathname: string): string {
   const path = pathname.replace(/\/+$/, '') || '/'
-  const hit = links.find((l) => path === l.prefix || path.startsWith(`${l.prefix}/`))
+  const hit = allLinks.find((l) => path === l.prefix || path.startsWith(`${l.prefix}/`))
   return hit?.label ?? 'פרפקטו'
+}
+
+function NavList({
+  items,
+  pathname,
+  onNavigate,
+}: {
+  items: NavLink[]
+  pathname: string
+  onNavigate: () => void
+}) {
+  return (
+    <List disablePadding>
+      {items.map((l) => {
+        const selected = pathname === l.prefix || pathname.startsWith(`${l.prefix}/`)
+        return (
+          <ListItemButton
+            key={l.prefix}
+            component={RouterLink}
+            to={l.to}
+            selected={selected}
+            onClick={onNavigate}
+            sx={{
+              ...(selected
+                ? {
+                  bgcolor: 'rgba(0,0,0,0.06)',
+                  borderLeft: '4px solid',
+                  borderColor: 'primary.main',
+                }
+                : {}),
+            }}
+          >
+            <ListItemText
+              primary={l.label}
+              slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right' } } }}
+            />
+          </ListItemButton>
+        )
+      })}
+    </List>
+  )
 }
 
 export default function AppLayout() {
@@ -68,9 +119,20 @@ export default function AppLayout() {
     }
   }, [])
 
+  const closeMobileDrawer = () => setMobileOpen(false)
+
   const drawer = (
-    <Box sx={{ textAlign: 'right', direction: 'rtl' }}>
-      <Toolbar sx={{ justifyContent: 'center', py: 1 }}>
+    <Box
+      sx={{
+        textAlign: 'right',
+        direction: 'rtl',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: '100%',
+      }}
+    >
+      <Toolbar sx={{ justifyContent: 'center', py: 1, flexShrink: 0 }}>
         <Box
           component="img"
           src="/perfecto-logo.svg"
@@ -79,35 +141,13 @@ export default function AppLayout() {
         />
       </Toolbar>
       <Divider />
-      <List>
-        {links.map((l) => {
-          const selected =
-            location.pathname === l.prefix || location.pathname.startsWith(`${l.prefix}/`)
-          return (
-            <ListItemButton
-              key={l.prefix}
-              component={RouterLink}
-              to={l.to}
-              selected={selected}
-              onClick={() => setMobileOpen(false)}
-              sx={{
-                ...(selected
-                  ? {
-                    bgcolor: 'rgba(0,0,0,0.06)',
-                    borderLeft: '4px solid',
-                    borderColor: 'primary.main',
-                  }
-                  : {}),
-              }}
-            >
-              <ListItemText
-                primary={l.label}
-                slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right' } } }}
-              />
-            </ListItemButton>
-          )
-        })}
-      </List>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <NavList items={mainLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
+      </Box>
+      <Divider />
+      <Box sx={{ flexShrink: 0, mt: 'auto' }}>
+        <NavList items={bottomLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
+      </Box>
     </Box>
   )
 
@@ -204,7 +244,12 @@ export default function AppLayout() {
           ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              display: 'flex',
+              flexDirection: 'column',
+            },
           }}
         >
           {drawer}
@@ -214,7 +259,12 @@ export default function AppLayout() {
           variant="permanent"
           sx={{
             display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+              display: 'flex',
+              flexDirection: 'column',
+            },
           }}
           open
         >

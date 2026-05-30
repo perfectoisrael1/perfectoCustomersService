@@ -12,9 +12,12 @@ const AccountsPage = lazy(() => import('./pages/AccountsPage'))
 const LeadsPage = lazy(() => import('./pages/LeadsPage'))
 const TicketsPage = lazy(() => import('./pages/TicketsPage'))
 const TasksPage = lazy(() => import('./pages/TasksPage'))
+const DomainsPage = lazy(() => import('./pages/DomainsPage'))
 const CitiesPage = lazy(() => import('./pages/CitiesPage'))
 const CommissionsPage = lazy(() => import('./pages/CommissionsPage'))
 const CompanyEmployeesPage = lazy(() => import('./pages/CompanyEmployeesPage'))
+const DashboardsPage = lazy(() => import('./pages/DashboardsPage'))
+const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
 
 function PageLoadFallback() {
   return (
@@ -99,9 +102,17 @@ export default function App() {
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
                 <Route path="/tasks/:tabSlug" element={<TasksPage />} />
+                <Route path="/domains" element={<DomainsPage />} />
                 <Route path="/cities" element={<CitiesPage />} />
                 <Route path="/commissions" element={<CommissionsPage />} />
                 <Route path="/company-employees" element={<CompanyEmployeesPage />} />
+                <Route path="/dashboards" element={<Navigate to="/dashboards/leads" replace />} />
+                <Route path="/dashboards/:segment" element={<DashboardsPage />} />
+                <Route path="/personal-area/attendance" element={<Navigate to="/personal-area/attendance/attendance" replace />} />
+                <Route path="/personal-area/attendance/:subTab" element={<PersonalAreaPage />} />
+                <Route path="/personal-area/availability" element={<PersonalAreaPage />} />
+                <Route path="/personal-area/details" element={<Navigate to="/personal-area" replace />} />
+                <Route path="/personal-area" element={<PersonalAreaPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/jobs/today" replace />} />
             </Routes>

@@ -141,6 +141,7 @@ export default function AccountEditDialog({
       fontWeight: 600,
     },
   }
+  const ltrInput = { sx: { textAlign: 'right' as const, fontSize: 14, direction: 'ltr' as const } }
 
   const renderPhoneTab = () => (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
@@ -162,6 +163,17 @@ export default function AccountEditDialog({
           onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
           sx={accountFieldInputSx}
           slotProps={{ input: phoneInput }}
+        />
+      </Field>
+      <Field label="סיסמה">
+        <TextField
+          fullWidth
+          size="small"
+          value={form.password ?? ''}
+          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+          sx={accountFieldInputSx}
+          slotProps={{ input: ltrInput }}
+          helperText="מינימום 8 תווים. נקה את השדה כדי לא לשנות את הסיסמה"
         />
       </Field>
       <Field label="מספר ת.ז / ח.פ">

@@ -8,6 +8,7 @@ type AuthContextValue = {
   isCheckingAuth: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
+  refreshUser: (next: User) => void
 }
 
 type ApiError = Error & { status?: number }
@@ -57,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const refreshUser = useCallback((next: User) => {
+    setUser(next)
+  }, [])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       token,
@@ -65,8 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isCheckingAuth,
       login,
       logout,
+      refreshUser,
     }),
-    [token, user, isCheckingAuth, login, logout],
+    [token, user, isCheckingAuth, login, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -240,6 +240,7 @@ export default function AccountsPage() {
           ? null
           : Number.parseInt(String(row.yearsOfExperience), 10),
       slug: row.slug,
+      password: row.password?.trim() && row.password !== '—' ? row.password : '',
     })
     setEditor(row)
   }
@@ -275,7 +276,7 @@ export default function AccountsPage() {
     }
   }
 
-  const colSpan = 6
+  const colSpan = 7
 
   return (
     <>
@@ -457,6 +458,7 @@ export default function AccountsPage() {
                               טלפון
                             </TableSortLabel>
                           </TableCell>
+                          <TableCell>סיסמה</TableCell>
                           <TableCell sortDirection={sort.col === 'specialtiesCategory' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'specialtiesCategory'}
@@ -509,6 +511,9 @@ export default function AccountsPage() {
                             >
                               <TableCell title={row.accountName}>{row.accountName}</TableCell>
                               <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
+                              <TableCell title={String(row.password || '')}>
+                                {row.password?.trim() ? row.password : '—'}
+                              </TableCell>
                               <TableCell title={String(row.specialtiesCategory || '')}>
                                 {row.specialtiesCategory || '—'}
                               </TableCell>

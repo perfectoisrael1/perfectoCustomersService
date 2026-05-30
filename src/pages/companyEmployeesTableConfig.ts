@@ -89,6 +89,7 @@ export function formatCompanyEmployeeStatusLabel(raw: unknown): string {
 export const COMPANY_EMPLOYEES_FALLBACK_COLUMNS = [
   'id',
   'username',
+  'password',
   'fullName',
   'role',
   'status',
@@ -99,6 +100,7 @@ export const COMPANY_EMPLOYEES_FALLBACK_COLUMNS = [
 const PREFERRED_COLUMN_ORDER = [
   'id',
   'username',
+  'password',
   'fullName',
   'full_name',
   'role',
