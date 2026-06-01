@@ -2,24 +2,38 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /
 
+# Force HTTPS when TLS terminates at CDN / reverse proxy (prevents mixed-content redirects)
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L,NE]
+
 # BEGIN SPA_STATIC_TRAILING_SLASH
-RewriteRule ^accounts/businesses$ /accounts/businesses/ [R=301,L]
-RewriteRule ^company-employees$ /company-employees/ [R=301,L]
-RewriteRule ^jobs/exceptions$ /jobs/exceptions/ [R=301,L]
-RewriteRule ^accounts/today$ /accounts/today/ [R=301,L]
-RewriteRule ^tasks/my-tasks$ /tasks/my-tasks/ [R=301,L]
-RewriteRule ^commissions$ /commissions/ [R=301,L]
-RewriteRule ^jobs/search$ /jobs/search/ [R=301,L]
-RewriteRule ^jobs/leave$ /jobs/leave/ [R=301,L]
-RewriteRule ^jobs/today$ /jobs/today/ [R=301,L]
-RewriteRule ^tasks/all$ /tasks/all/ [R=301,L]
-RewriteRule ^accounts$ /accounts/ [R=301,L]
-RewriteRule ^tickets$ /tickets/ [R=301,L]
-RewriteRule ^cities$ /cities/ [R=301,L]
-RewriteRule ^leads$ /leads/ [R=301,L]
-RewriteRule ^login$ /login/ [R=301,L]
-RewriteRule ^tasks$ /tasks/ [R=301,L]
-RewriteRule ^jobs$ /jobs/ [R=301,L]
+RewriteRule ^personal-area/attendance/attendance$ /personal-area/attendance/attendance/ [L]
+RewriteRule ^personal-area/availability$ /personal-area/availability/ [L]
+RewriteRule ^personal-area/attendance$ /personal-area/attendance/ [L]
+RewriteRule ^personal-area/details$ /personal-area/details/ [L]
+RewriteRule ^accounts/businesses$ /accounts/businesses/ [L]
+RewriteRule ^company-employees$ /company-employees/ [L]
+RewriteRule ^dashboards/leads$ /dashboards/leads/ [L]
+RewriteRule ^jobs/exceptions$ /jobs/exceptions/ [L]
+RewriteRule ^accounts/today$ /accounts/today/ [L]
+RewriteRule ^tasks/my-tasks$ /tasks/my-tasks/ [L]
+RewriteRule ^personal-area$ /personal-area/ [L]
+RewriteRule ^tasks/urgent$ /tasks/urgent/ [L]
+RewriteRule ^commissions$ /commissions/ [L]
+RewriteRule ^jobs/search$ /jobs/search/ [L]
+RewriteRule ^dashboards$ /dashboards/ [L]
+RewriteRule ^jobs/leave$ /jobs/leave/ [L]
+RewriteRule ^jobs/today$ /jobs/today/ [L]
+RewriteRule ^tasks/done$ /tasks/done/ [L]
+RewriteRule ^tasks/all$ /tasks/all/ [L]
+RewriteRule ^accounts$ /accounts/ [L]
+RewriteRule ^domains$ /domains/ [L]
+RewriteRule ^tickets$ /tickets/ [L]
+RewriteRule ^cities$ /cities/ [L]
+RewriteRule ^leads$ /leads/ [L]
+RewriteRule ^tasks$ /tasks/ [L]
+RewriteRule ^jobs$ /jobs/ [L]
 # END SPA_STATIC_TRAILING_SLASH
 
 # Serve existing files and directories before SPA fallback

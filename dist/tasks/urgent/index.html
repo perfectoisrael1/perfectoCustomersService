@@ -1,19 +1,19 @@
 <!doctype html>
 <html lang="he" dir="rtl">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>מעביר…</title>
-    <script>
-      try {
-        var p = location.pathname || ''
-        if (p.endsWith('/') && p.length > 1) p = p.slice(0, -1)
-        if (p && p.startsWith('/') && !p.startsWith('//') && p.indexOf('..') === -1) {
-          sessionStorage.setItem('perfectoSpaRedirect', p)
-        }
-      } catch (e) {}
-      location.replace('/')
-    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>פרפקטו שירות לקוחות</title>
+    <script type="module" crossorigin src="/assets/index-B8eChNCa.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/Box-VGHt72rv.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-OE4NN4TA-CQb2_6Tx.js">
+    <link rel="modulepreload" crossorigin href="/assets/csApi-CjFKA9rD.js">
+    <link rel="modulepreload" crossorigin href="/assets/listItemTextClasses-Bup2RI1O.js">
+    <link rel="modulepreload" crossorigin href="/assets/Toolbar-BeYhRFzJ.js">
+    <link rel="modulepreload" crossorigin href="/assets/useAuth-Bgen-Ioo.js">
+    <link rel="modulepreload" crossorigin href="/assets/headerLayout-UdUhvTSL.js">
   </head>
-  <body></body>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

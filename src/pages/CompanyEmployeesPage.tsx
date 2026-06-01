@@ -706,8 +706,7 @@ export default function CompanyEmployeesPage() {
                   key={k}
                   direction="row"
                   spacing={2}
-                  alignItems="center"
-                  sx={{ direction: 'rtl', width: '100%' }}
+                  sx={{ alignItems: 'center', direction: 'rtl', width: '100%' }}
                 >
                   <FormControl
                     fullWidth

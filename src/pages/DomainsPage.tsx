@@ -788,7 +788,7 @@ export default function DomainsPage() {
                 displayEmpty: true,
                 renderValue: (selected) =>
                   renderSelectPlaceholder(String(selected ?? ''), 'סטטוס'),
-                ...DOMAIN_EDITOR_SELECT_MENU_PROPS,
+                MenuProps: DOMAIN_EDITOR_SELECT_MENU_PROPS,
               },
             }}
           >

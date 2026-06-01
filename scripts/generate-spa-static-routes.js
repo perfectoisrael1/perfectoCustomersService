@@ -5,7 +5,12 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { HTACCESS_TRAILING_SLASH_ONLY, ROUTES, SPA_REDIRECT_STORAGE_KEY } from './spa-routes.js'
+import {
+  HTACCESS_SKIP_TRAILING_SLASH,
+  HTACCESS_TRAILING_SLASH_ONLY,
+  ROUTES,
+  SPA_REDIRECT_STORAGE_KEY,
+} from './spa-routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
@@ -49,8 +54,12 @@ function injectHtaccessRules() {
   const htPath = path.join(publicDir, '.htaccess')
   let content = fs.readFileSync(htPath, 'utf8')
 
-  const sorted = [...ROUTES, ...HTACCESS_TRAILING_SLASH_ONLY].sort((a, b) => b.length - a.length)
-  const block = sorted.map((r) => `RewriteRule ^${r}$ /${r}/ [R=301,L]`).join('\n')
+  const skip = new Set(HTACCESS_SKIP_TRAILING_SLASH)
+  const sorted = [...ROUTES, ...HTACCESS_TRAILING_SLASH_ONLY]
+    .filter((r) => !skip.has(r))
+    .sort((a, b) => b.length - a.length)
+  // Internal rewrite only — external R=301 becomes http:// behind SSL-terminating proxies.
+  const block = sorted.map((r) => `RewriteRule ^${r}$ /${r}/ [L]`).join('\n')
 
   const injected = `${MARK_START}\n${block}\n${MARK_END}`
 

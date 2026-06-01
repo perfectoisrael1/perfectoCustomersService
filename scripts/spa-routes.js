@@ -12,6 +12,9 @@ export const SPA_REDIRECT_STORAGE_KEY = 'perfectoSpaRedirect'
 
 export const HTACCESS_TRAILING_SLASH_ONLY = []
 
+/** No 301 to /route/ — SPA fallback handles the path (avoids http:// redirects behind SSL proxy). */
+export const HTACCESS_SKIP_TRAILING_SLASH = ['login']
+
 export const ROUTES = collectSpaRoutes({
   rootDir,
   globs: ['src/**/*.{tsx,ts}'],
