@@ -167,7 +167,7 @@ const TASK_EDITOR_SELECT_MENU_PROPS = {
 } as const
 
 function taskIsUrgent(r: Task): boolean {
-  return String(r.priority || '').trim() === 'דחוף'
+  return String(r.priority || '').trim() === 'דחוף' && r.status !== 'בוצע'
 }
 
 function tabCriteriaLabel(tab: TaskTab): string {
@@ -179,7 +179,7 @@ function tabCriteriaLabel(tab: TaskTab): string {
     case 'all':
       return 'כל המשימות במערכת שאינן בסטטוס «בוצע».'
     case 'urgent':
-      return 'כל המשימות שהחשיבות שלהן מוגדרת כ«דחוף», בכל סטטוס.'
+      return 'כל המשימות שהחשיבות שלהן מוגדרת כ«דחוף», שאינן בסטטוס «בוצע».'
   }
 }
 

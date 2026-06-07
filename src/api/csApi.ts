@@ -126,6 +126,7 @@ export type Service = {
   subService?: string | null
   price?: number | null
   slug?: string | null
+  promotion?: boolean | null
 }
 
 type ApiError = Error & { status?: number }
@@ -504,11 +505,59 @@ export async function getServices() {
   return csFetch<Service[]>('/customer-service/catalog/services')
 }
 
-export async function patchServicePrice(id: number, price: number) {
+export type ServicePatchInput = {
+  price?: number
+  service?: string
+  promotion?: boolean
+}
+
+export type ServiceCreateInput = {
+  category: string
+  service: string
+  subService?: string | null
+  price: number
+}
+
+export async function createService(body: ServiceCreateInput) {
+  return csFetch<Service>('/customer-service/catalog/services', {
+    method: 'POST',
+    body,
+  })
+}
+
+export async function patchService(id: number, body: ServicePatchInput) {
   return csFetch<Service>(`/customer-service/catalog/services/${id}`, {
     method: 'PATCH',
-    body: { price },
+    body,
   })
+}
+
+export async function patchServicePrice(id: number, price: number) {
+  return patchService(id, { price })
+}
+
+export async function patchCategoryPromotion(category: string, promotion: boolean) {
+  return csFetch<{ category: string; promotion: boolean; updated: number }>(
+    '/customer-service/catalog/services/category-promotion',
+    {
+      method: 'PATCH',
+      body: { category, promotion },
+    },
+  )
+}
+
+export type PaymentLinkRow = {
+  id: number
+  accountId: number
+  amount: number
+  status: string
+  purpose: string | null
+  created: string
+  updated: string
+}
+
+export async function getPaymentLinks() {
+  return csFetch<PaymentLinkRow[]>('/customer-service/payment-links')
 }
 
 export type PerfectoCustomerServiceUser = Record<string, unknown> & { id: number }

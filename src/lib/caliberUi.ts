@@ -36,6 +36,76 @@ export const TICKET_STATUS_DONE = 'בוצע'
 export const TICKET_STATUS_NOT_RELEVANT = 'לא רלוונטי'
 export const TICKET_STATUS_NO_ANSWER_3 = 'אין מענה פעם 3'
 export const ISSUE_TYPE_INVOICE = 'לא קיבל חשבונית'
+export const ISSUE_TYPE_INVOICE_SHORT = 'חשבונית'
+
+/** אופציות «סוג הבעיה» בטופס קריאה — בינתיים מוגבל */
+export const TICKET_ISSUE_TYPE_FORM_OPTIONS: { label: string; bg: string; fg: string }[] = [
+  { label: 'פניות', bg: '#66BB6A', fg: '#FFF' },
+  { label: ISSUE_TYPE_INVOICE_SHORT, bg: '#424242', fg: '#FFF' },
+  { label: 'בעיה בהרשמה', bg: '#AB47BC', fg: '#FFF' },
+]
+
+export function isInvoiceIssueType(issueType: string | null | undefined): boolean {
+  const issue = String(issueType || '').trim()
+  return issue === ISSUE_TYPE_INVOICE || issue === ISSUE_TYPE_INVOICE_SHORT
+}
+
+export const TICKET_CUSTOM_ISSUE_TYPES_STORAGE_KEY = 'perfecto-cs-custom-ticket-issue-types'
+
+export function loadCustomTicketIssueTypes(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(TICKET_CUSTOM_ISSUE_TYPES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map((v) => String(v ?? '').trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+export function saveCustomTicketIssueTypes(types: string[]): void {
+  if (typeof window === 'undefined') return
+  const unique = Array.from(new Set(types.map((t) => t.trim()).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'he'),
+  )
+  window.localStorage.setItem(TICKET_CUSTOM_ISSUE_TYPES_STORAGE_KEY, JSON.stringify(unique))
+}
+
+const DEFAULT_TICKET_ISSUE_TYPE_LABELS = new Set(
+  TICKET_ISSUE_TYPE_FORM_OPTIONS.map((o) => o.label),
+)
+
+/** מיזוג ברירת מחדל, מותאמים אישית, מהטבלה והערך הנוכחי */
+export function buildTicketIssueTypeFormOptions(
+  customTypes: string[],
+  existingFromRows: string[] = [],
+  currentValue?: string | null,
+): string[] {
+  const seen = new Set<string>()
+  const ordered: string[] = []
+
+  const add = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    ordered.push(trimmed)
+  }
+
+  for (const o of TICKET_ISSUE_TYPE_FORM_OPTIONS) add(o.label)
+  for (const t of customTypes) add(t)
+  for (const t of existingFromRows) add(t)
+  if (currentValue) add(String(currentValue))
+
+  return ordered
+}
+
+export function isDefaultTicketIssueType(label: string): boolean {
+  return DEFAULT_TICKET_ISSUE_TYPE_LABELS.has(label.trim())
+}
 
 export const CS_STATUS_OPTIONS = [
   'חדשה',
@@ -74,7 +144,9 @@ export const CS_ISSUE_TYPE_OPTIONS: { label: string; bg: string; fg: string }[] 
   { label: 'אחר', bg: '#90A4AE', fg: '#FFF' },
 ]
 
-const ISSUE_MAP = Object.fromEntries(CS_ISSUE_TYPE_OPTIONS.map((o) => [o.label, o]))
+const ISSUE_MAP = Object.fromEntries(
+  [...CS_ISSUE_TYPE_OPTIONS, ...TICKET_ISSUE_TYPE_FORM_OPTIONS].map((o) => [o.label, o]),
+)
 
 export function issueTypeChipColors(label: string | null | undefined) {
   return ISSUE_MAP[String(label || '').trim()] || { bg: '#E0E0E0', fg: '#FFF' }
@@ -102,6 +174,15 @@ const JOBS_NEUTRAL = '#C4C4C4'
 export const JOB_STATUS_CHIP_COLORS: Record<string, { bg: string; fg: string }> = {
   חדשה: { bg: JOBS_NEUTRAL, fg: '#fff' },
   'פנייה חדשה': { bg: JOBS_NEUTRAL, fg: '#fff' },
+  'פניות ללא ספקים': { bg: JOBS_NEUTRAL, fg: '#fff' },
+  ממתין: { bg: '#FF9800', fg: '#fff' },
+  'ממתין לאישור ספק': { bg: '#FF9800', fg: '#fff' },
+  מאושר: { bg: '#4CAF50', fg: '#fff' },
+  'פניות מאושרות': { bg: '#4CAF50', fg: '#fff' },
+  נדחה: { bg: '#DF2F4A', fg: '#fff' },
+  'פניות שנדחו': { bg: '#DF2F4A', fg: '#fff' },
+  נתפס: { bg: '#DF2F4A', fg: '#fff' },
+  'נתפס על ידי ספק אחר': { bg: '#DF2F4A', fg: '#fff' },
   'ממתין ללקוח': { bg: '#FDB85A', fg: '#fff' },
   'הצעת מחיר': { bg: '#2691C0', fg: '#fff' },
   'בהצעת מחיר': { bg: '#2691C0', fg: '#fff' },
@@ -114,7 +195,6 @@ export const JOB_STATUS_CHIP_COLORS: Record<string, { bg: string; fg: string }> 
   'נסגר אוטומטית': { bg: '#00C875', fg: '#fff' },
   'בוטל לבקשת לקוח': { bg: '#DF2F4A', fg: '#fff' },
   'לא ידוע': { bg: '#9E9E9E', fg: '#fff' },
-  נתפס: { bg: '#B0BEC5', fg: '#fff' },
 }
 
 export function jobStatusChipColors(statusLabel: string | null | undefined) {
@@ -218,4 +298,4 @@ export function taskProjectChipColors(project: string | null | undefined): { bg:
   }
 }
 
-export const DEFAULT_TICKET_RESPONSIBLE = ''
+export const DEFAULT_TICKET_RESPONSIBLE = 'איתמר בן עטר'

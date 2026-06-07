@@ -10,12 +10,10 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   IconButton,
   InputAdornment,
   MenuItem,
   Stack,
-  Switch,
   Tab,
   Table,
   TableBody,
@@ -58,7 +56,6 @@ type DomainsSortColumn =
   | 'status'
   | 'purchaseDate'
   | 'renewalDate'
-  | 'isCompleted'
 
 const DOMAIN_STATUS_OPTIONS = ['פעיל', 'ממתין', 'פג תוקף', 'בביטול']
 
@@ -66,6 +63,13 @@ const DOMAIN_EXPIRING_THIS_MONTH_HIGHLIGHT_SX = {
   color: '#d50000',
   fontWeight: 700,
   bgcolor: '#ff8a80',
+} as const
+
+const DOMAIN_FIELD_LABEL_SX = {
+  fontWeight: 800,
+  mb: 0.5,
+  display: 'block',
+  textAlign: 'right',
 } as const
 
 /** מיקום טקסט מימין לשמאל בשדות Outlined של דיאלוג הדומיין */
@@ -78,11 +82,6 @@ const DOMAIN_EDITOR_RTL_FIELD_SX = {
     textAlign: 'right',
     direction: 'rtl' as const,
   },
-  '& .MuiInputBase-input::placeholder': {
-    textAlign: 'right',
-    opacity: 1,
-    color: 'text.secondary',
-  },
   '& .MuiSelect-select': {
     textAlign: 'right',
     direction: 'rtl' as const,
@@ -91,6 +90,15 @@ const DOMAIN_EDITOR_RTL_FIELD_SX = {
     left: 8,
     right: 'auto',
   },
+}
+
+function DomainField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box sx={{ width: '100%' }}>
+      <Typography sx={DOMAIN_FIELD_LABEL_SX}>{label}</Typography>
+      {children}
+    </Box>
+  )
 }
 
 const DOMAIN_EDITOR_SELECT_MENU_PROPS = {
@@ -104,28 +112,17 @@ const DOMAIN_EDITOR_SELECT_MENU_PROPS = {
   },
 } as const
 
-function renderSelectPlaceholder(value: string, placeholder: string) {
-  if (value) return value
-  return (
-    <Box component="span" sx={{ color: 'text.secondary' }}>
-      {placeholder}
-    </Box>
-  )
-}
-
 function DomainDateField({
-  placeholder,
+  label,
   value,
   onChange,
 }: {
-  placeholder: string
+  label: string
   value: string | null | undefined
   onChange: (next: string | null) => void
 }) {
-  const hasValue = Boolean(value)
-
   return (
-    <Box sx={{ position: 'relative', width: '100%' }}>
+    <DomainField label={label}>
       <TextField
         type="date"
         value={value || ''}
@@ -140,37 +137,12 @@ function DomainDateField({
             marginInlineStart: '10px',
             cursor: 'pointer',
           },
-          ...(hasValue
-            ? {}
-            : {
-                '& input[type="date"]::-webkit-datetime-edit': { opacity: 0 },
-                '& input[type="date"]::-webkit-datetime-edit-fields-wrapper': { opacity: 0 },
-              }),
         }}
-        slotProps={{ htmlInput: { dir: 'rtl', 'aria-label': placeholder } }}
+        slotProps={{
+          htmlInput: { dir: 'rtl', style: { textAlign: 'right' } },
+        }}
       />
-      {!hasValue ? (
-        <Box
-          component="span"
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            right: 48,
-            left: 14,
-            transform: 'translateY(-50%)',
-            color: 'text.secondary',
-            pointerEvents: 'none',
-            direction: 'rtl',
-            textAlign: 'right',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {placeholder}
-        </Box>
-      ) : null}
-    </Box>
+    </DomainField>
   )
 }
 
@@ -184,8 +156,6 @@ function domainSortValue(row: Domain, col: DomainsSortColumn): string {
       return row.purchaseDate ? String(row.purchaseDate).slice(0, 10) : ''
     case 'renewalDate':
       return row.renewalDate ? String(row.renewalDate).slice(0, 10) : ''
-    case 'isCompleted':
-      return row.isCompleted ? '1' : '0'
     default:
       return ''
   }
@@ -209,15 +179,6 @@ function currentMonthKeyJerusalem(): string {
 function isRenewalThisMonth(renewalDate: string | null | undefined): boolean {
   if (!renewalDate) return false
   return String(renewalDate).slice(0, 7) === currentMonthKeyJerusalem()
-}
-
-function addOneYearToDate(isoDate: string | null | undefined): string | null {
-  if (!isoDate) return null
-  const base = String(isoDate).slice(0, 10)
-  const d = new Date(`${base}T12:00:00`)
-  if (Number.isNaN(d.getTime())) return null
-  d.setFullYear(d.getFullYear() + 1)
-  return d.toISOString().slice(0, 10)
 }
 
 function domainTabLabel(icon: React.ReactNode, text: string) {
@@ -257,12 +218,6 @@ export default function DomainsPage() {
   const [editor, setEditor] = useState<Domain | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DomainInput>({})
-  const [paymentConfirm, setPaymentConfirm] = useState<Domain | null>(null)
-  const [paymentSuccess, setPaymentSuccess] = useState<{
-    domainName: string
-    nextRenewalDate: string
-  } | null>(null)
-  const [paymentSaving, setPaymentSaving] = useState(false)
 
   const [sort, setSort] = useState<{ col: DomainsSortColumn; dir: 'asc' | 'desc' }>({
     col: 'renewalDate',
@@ -404,57 +359,7 @@ export default function DomainsPage() {
     }
   }
 
-  const handleCompletedToggle = (row: Domain, nextChecked: boolean) => {
-    if (nextChecked) {
-      if (!row.renewalDate) {
-        setError('חסר תאריך חידוש לדומיין')
-        return
-      }
-      setPaymentConfirm(row)
-      return
-    }
-    void (async () => {
-      setPaymentSaving(true)
-      setError(null)
-      try {
-        await patchDomain(row.id, { isCompleted: false })
-        await load()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'שגיאה בעדכון')
-      } finally {
-        setPaymentSaving(false)
-      }
-    })()
-  }
-
-  const confirmDomainPayment = async () => {
-    if (!paymentConfirm) return
-    const nextRenewalDate = addOneYearToDate(paymentConfirm.renewalDate)
-    if (!nextRenewalDate) {
-      setError('תאריך חידוש לא תקין')
-      return
-    }
-    setPaymentSaving(true)
-    setError(null)
-    try {
-      await patchDomain(paymentConfirm.id, {
-        renewalDate: nextRenewalDate,
-        isCompleted: false,
-      })
-      setPaymentSuccess({
-        domainName: paymentConfirm.domainName,
-        nextRenewalDate,
-      })
-      setPaymentConfirm(null)
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה בעדכון')
-    } finally {
-      setPaymentSaving(false)
-    }
-  }
-
-  const colSpan = 5
+  const colSpan = 4
 
   return (
     <>
@@ -677,15 +582,6 @@ export default function DomainsPage() {
                                 תאריך חידוש
                               </TableSortLabel>
                             </TableCell>
-                            <TableCell sortDirection={sort.col === 'isCompleted' ? sort.dir : false}>
-                              <TableSortLabel
-                                active={sort.col === 'isCompleted'}
-                                direction={sort.col === 'isCompleted' ? sort.dir : 'asc'}
-                                onClick={() => onSortColumn('isCompleted')}
-                              >
-                                בוצע
-                              </TableSortLabel>
-                            </TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -711,17 +607,6 @@ export default function DomainsPage() {
                                 sx={highlightExpiringThisMonth ? DOMAIN_EXPIRING_THIS_MONTH_HIGHLIGHT_SX : undefined}
                               >
                                 {formatDateCell(row.renewalDate)}
-                              </TableCell>
-                              <TableCell
-                                sx={{ overflow: 'visible', textOverflow: 'clip' }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Switch
-                                  checked={row.isCompleted}
-                                  disabled={paymentSaving && paymentConfirm?.id === row.id}
-                                  onChange={(e) => handleCompletedToggle(row, e.target.checked)}
-                                  size="small"
-                                />
                               </TableCell>
                             </TableRow>
                             )
@@ -768,44 +653,45 @@ export default function DomainsPage() {
           menuDisabled={saving}
         />
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, direction: 'rtl', textAlign: 'right' }}>
-          <TextField
-            placeholder="שם"
-            value={form.domainName || ''}
-            onChange={(e) => setForm((f) => ({ ...f, domainName: e.target.value }))}
-            fullWidth
-            required
-            sx={DOMAIN_EDITOR_RTL_FIELD_SX}
-            slotProps={{ htmlInput: { dir: 'rtl' } }}
-          />
-          <TextField
-            select
-            value={form.status || ''}
-            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value || null }))}
-            fullWidth
-            sx={DOMAIN_EDITOR_RTL_FIELD_SX}
-            slotProps={{
-              select: {
-                displayEmpty: true,
-                renderValue: (selected) =>
-                  renderSelectPlaceholder(String(selected ?? ''), 'סטטוס'),
-                MenuProps: DOMAIN_EDITOR_SELECT_MENU_PROPS,
-              },
-            }}
-          >
-            <MenuItem value="">—</MenuItem>
-            {DOMAIN_STATUS_OPTIONS.map((s) => (
-              <MenuItem key={s} value={s}>
-                {s}
-              </MenuItem>
-            ))}
-          </TextField>
+          <DomainField label="שם">
+            <TextField
+              value={form.domainName || ''}
+              onChange={(e) => setForm((f) => ({ ...f, domainName: e.target.value }))}
+              fullWidth
+              required
+              sx={DOMAIN_EDITOR_RTL_FIELD_SX}
+              slotProps={{ htmlInput: { dir: 'rtl' } }}
+            />
+          </DomainField>
+          <DomainField label="סטטוס">
+            <TextField
+              select
+              value={form.status || ''}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value || null }))}
+              fullWidth
+              sx={DOMAIN_EDITOR_RTL_FIELD_SX}
+              slotProps={{
+                select: {
+                  displayEmpty: true,
+                  MenuProps: DOMAIN_EDITOR_SELECT_MENU_PROPS,
+                },
+              }}
+            >
+              <MenuItem value="">—</MenuItem>
+              {DOMAIN_STATUS_OPTIONS.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {s}
+                </MenuItem>
+              ))}
+            </TextField>
+          </DomainField>
           <DomainDateField
-            placeholder="תאריך רכישה"
+            label="תאריך רכישה"
             value={form.purchaseDate}
             onChange={(next) => setForm((f) => ({ ...f, purchaseDate: next }))}
           />
           <DomainDateField
-            placeholder="תאריך חידוש"
+            label="תאריך חידוש"
             value={form.renewalDate}
             onChange={(next) => setForm((f) => ({ ...f, renewalDate: next }))}
           />
@@ -816,53 +702,6 @@ export default function DomainsPage() {
           </Button>
           <Button variant="contained" onClick={() => void save()} disabled={saving}>
             {saving ? 'שומר…' : 'שמירה'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={paymentConfirm != null}
-        onClose={() => !paymentSaving && setPaymentConfirm(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ direction: 'rtl', textAlign: 'right' }}>אישור תשלום</DialogTitle>
-        <DialogContent sx={{ direction: 'rtl', textAlign: 'right' }}>
-          <Typography>
-            האם אתה בטוח ששילמת על הדומיין{' '}
-            <strong>{paymentConfirm?.domainName}</strong> למה שכתוב בתאריך התפוגה{' '}
-            <strong>{formatDateCell(paymentConfirm?.renewalDate)}</strong>?
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, gap: 1, direction: 'rtl' }}>
-          <Button onClick={() => setPaymentConfirm(null)} disabled={paymentSaving}>
-            ביטול
-          </Button>
-          <Button variant="contained" onClick={() => void confirmDomainPayment()} disabled={paymentSaving}>
-            {paymentSaving ? 'מעדכן…' : 'אישור'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={paymentSuccess != null}
-        onClose={() => setPaymentSuccess(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ direction: 'rtl', textAlign: 'right' }}>הדומיין עודכן</DialogTitle>
-        <DialogContent sx={{ direction: 'rtl', textAlign: 'right' }}>
-          <Typography sx={{ mb: 1 }}>
-            הדומיין <strong>{paymentSuccess?.domainName}</strong> עודכן בהצלחה.
-          </Typography>
-          <Typography>
-            תאריך החידוש הבא:{' '}
-            <strong>{formatDateCell(paymentSuccess?.nextRenewalDate)}</strong>
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, direction: 'rtl' }}>
-          <Button variant="contained" onClick={() => setPaymentSuccess(null)}>
-            אישור
           </Button>
         </DialogActions>
       </Dialog>

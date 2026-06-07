@@ -11,6 +11,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogTitle,
   IconButton,
   InputAdornment,
   MenuItem,
@@ -30,10 +31,12 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
 import {
-  CS_ISSUE_TYPE_OPTIONS,
   CS_STATUS_OPTIONS,
   DEFAULT_TICKET_RESPONSIBLE,
-  ISSUE_TYPE_INVOICE,
+  buildTicketIssueTypeFormOptions,
+  isInvoiceIssueType,
+  loadCustomTicketIssueTypes,
+  saveCustomTicketIssueTypes,
   formatCsPhoneDisplay,
   issueTypeChipColors,
   isFollowUpTodayOrBefore,
@@ -45,6 +48,7 @@ import {
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import { useAuth } from '../context/useAuth'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -54,8 +58,10 @@ import {
 import {
   createTicket,
   deleteTicket,
+  getPerfectoCustomerServiceUsers,
   getTickets,
   patchTicket,
+  type PerfectoCustomerServiceUser,
   type Ticket,
   type TicketInput,
 } from '../api/csApi'
@@ -106,12 +112,17 @@ function ticketOpenForMyTasks(r: Ticket): boolean {
     return false
   }
   const issue = String(r.issueType || '').trim()
-  if (issue === ISSUE_TYPE_INVOICE) return false
+  if (isInvoiceIssueType(issue)) return false
   return isFollowUpTodayOrBefore(r.followUpDate ? String(r.followUpDate) : null)
+}
+
+function userDisplayName(user: PerfectoCustomerServiceUser): string {
+  return String(user.fullName || user.username || '').trim()
 }
 
 export default function TicketsPage() {
   const theme = useTheme()
+  const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = useMemo(() => {
     const t = searchParams.get('tab')
@@ -130,12 +141,26 @@ export default function TicketsPage() {
   }, [searchParams, setSearchParams])
 
   const [rows, setRows] = useState<Ticket[]>([])
+  const [systemUsers, setSystemUsers] = useState<PerfectoCustomerServiceUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<Ticket | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<TicketInput>({})
+  const [customIssueTypes, setCustomIssueTypes] = useState<string[]>(() => loadCustomTicketIssueTypes())
+  const [addIssueTypeDialogOpen, setAddIssueTypeDialogOpen] = useState(false)
+  const [newIssueTypeName, setNewIssueTypeName] = useState('')
+
+  const issueTypeOptions = useMemo(
+    () =>
+      buildTicketIssueTypeFormOptions(
+        customIssueTypes,
+        rows.map((r) => String(r.issueType || '')),
+        form.issueType,
+      ),
+    [customIssueTypes, rows, form.issueType],
+  )
 
   const [sort, setSort] = useState<{ col: TicketsSortColumn; dir: 'asc' | 'desc' }>({
     col: 'followUpDate',
@@ -160,6 +185,46 @@ export default function TicketsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await getPerfectoCustomerServiceUsers()
+        setSystemUsers(Array.isArray(data) ? data : [])
+      } catch {
+        setSystemUsers([])
+      }
+    })()
+  }, [])
+
+  const responsibleOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const u of systemUsers) {
+      const name = userDisplayName(u)
+      if (name) names.add(name)
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'he'))
+  }, [systemUsers])
+
+  const pickResponsible = useCallback(
+    (preferred?: string | null) => {
+      const pref = String(preferred || '').trim()
+      if (pref && responsibleOptions.includes(pref)) return pref
+      if (responsibleOptions.includes(DEFAULT_TICKET_RESPONSIBLE)) {
+        return DEFAULT_TICKET_RESPONSIBLE
+      }
+      const me = user
+        ? userDisplayName({
+            id: user.id ?? 0,
+            fullName: user.fullName,
+            username: user.username,
+          })
+        : ''
+      if (me && responsibleOptions.includes(me)) return me
+      return responsibleOptions[0] || ''
+    },
+    [responsibleOptions, user],
+  )
 
   const baseRows = useMemo(() => {
     if (tab === 'myTasks') return rows.filter(ticketOpenForMyTasks)
@@ -224,7 +289,7 @@ export default function TicketsPage() {
       issueType: '',
       details: '',
       status: 'חדשה',
-      responsible: DEFAULT_TICKET_RESPONSIBLE,
+      responsible: pickResponsible(),
       followUpDate: new Date().toISOString().slice(0, 10),
       notes: '',
     })
@@ -238,11 +303,33 @@ export default function TicketsPage() {
       issueType: row.issueType,
       details: row.details,
       status: row.status,
-      responsible: row.responsible,
+      responsible: pickResponsible(row.responsible),
       followUpDate: row.followUpDate ? String(row.followUpDate).slice(0, 10) : null,
       notes: row.notes,
     })
     setEditor(row)
+  }
+
+  const openAddIssueTypeDialog = () => {
+    setNewIssueTypeName('')
+    setAddIssueTypeDialogOpen(true)
+  }
+
+  const closeAddIssueTypeDialog = () => {
+    setAddIssueTypeDialogOpen(false)
+    setNewIssueTypeName('')
+  }
+
+  const confirmAddIssueType = () => {
+    const trimmed = newIssueTypeName.replace(/\s+/g, ' ').trim()
+    if (!trimmed) return
+    setCustomIssueTypes((prev) => {
+      const next = prev.includes(trimmed) ? prev : [...prev, trimmed]
+      saveCustomTicketIssueTypes(next)
+      return next
+    })
+    setForm((f) => ({ ...f, issueType: trimmed }))
+    closeAddIssueTypeDialog()
   }
 
   const save = async () => {
@@ -583,15 +670,53 @@ export default function TicketsPage() {
           menuDisabled={saving}
         />
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-          <TextField label="שם" value={form.name || ''} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} fullWidth />
-          <TextField label="טלפון" value={form.phoneNumber || ''} onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))} fullWidth />
-          <TextField select label="סוג הבעיה" value={form.issueType || ''} onChange={(e) => setForm((f) => ({ ...f, issueType: e.target.value }))} fullWidth>
-            {CS_ISSUE_TYPE_OPTIONS.map((o) => (
-              <MenuItem key={o.label} value={o.label}>
-                {o.label}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Stack direction="row" spacing={2} sx={{ width: '100%', direction: 'rtl' }}>
+            <TextField
+              label="שם"
+              value={form.name || ''}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              fullWidth
+              sx={{ flex: 1, minWidth: 0 }}
+            />
+            <TextField
+              label="טלפון"
+              value={form.phoneNumber || ''}
+              onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+              fullWidth
+              sx={{ flex: 1, minWidth: 0 }}
+            />
+          </Stack>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%', direction: 'rtl' }}>
+            <TextField
+              select
+              label="סוג הבעיה"
+              value={form.issueType || ''}
+              onChange={(e) => setForm((f) => ({ ...f, issueType: e.target.value }))}
+              fullWidth
+              sx={{ flex: 1, minWidth: 0 }}
+            >
+              {issueTypeOptions.map((label) => (
+                <MenuItem key={label} value={label}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <IconButton
+              onClick={openAddIssueTypeDialog}
+              aria-label="הוספת סוג בעיה"
+              sx={{
+                flexShrink: 0,
+                backgroundColor: 'primary.main',
+                color: 'primary.contrastText',
+                width: 38,
+                height: 38,
+                borderRadius: 2,
+                '&:hover': { backgroundColor: 'primary.dark' },
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Stack>
           <TextField select label="סטטוס" value={form.status || 'חדשה'} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} fullWidth>
             {CS_STATUS_OPTIONS.map((s) => (
               <MenuItem key={s} value={s}>
@@ -599,7 +724,13 @@ export default function TicketsPage() {
               </MenuItem>
             ))}
           </TextField>
-          <TextField label="אחראי" value={form.responsible || ''} onChange={(e) => setForm((f) => ({ ...f, responsible: e.target.value }))} fullWidth />
+          <TextField select label="אחראי" value={form.responsible || ''} onChange={(e) => setForm((f) => ({ ...f, responsible: e.target.value }))} fullWidth>
+            {responsibleOptions.map((name) => (
+              <MenuItem key={name} value={name}>
+                {name}
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField
             label="פולואפ"
             type="date"
@@ -620,6 +751,44 @@ export default function TicketsPage() {
               {saving ? 'שומר…' : 'שמירה'}
             </Button>
           </Stack>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={addIssueTypeDialogOpen}
+        onClose={() => !saving && closeAddIssueTypeDialog()}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ direction: 'rtl', textAlign: 'right' }}>הוספת סוג בעיה</DialogTitle>
+        <DialogContent sx={{ direction: 'rtl' }}>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="שם סוג הבעיה"
+            value={newIssueTypeName}
+            onChange={(e) => setNewIssueTypeName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                confirmAddIssueType()
+              }
+            }}
+            sx={{ mt: 1 }}
+            slotProps={{ htmlInput: { dir: 'rtl', style: { textAlign: 'right' } } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1, direction: 'rtl' }}>
+          <Button onClick={closeAddIssueTypeDialog}>ביטול</Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={confirmAddIssueType}
+            disabled={!newIssueTypeName.trim()}
+          >
+            הוספה
+          </Button>
         </DialogActions>
       </Dialog>
     </>

@@ -23,10 +23,10 @@ type NavLink = { to: string; prefix: string; label: string }
 
 const mainLinks: NavLink[] = [
   { to: '/personal-area', prefix: '/personal-area', label: 'אזור אישי' },
-  { to: '/jobs/today', prefix: '/jobs', label: 'פניות' },
+  { to: '/jobs/today', prefix: '/jobs', label: 'פניות מלקוחות' },
   { to: '/accounts/businesses', prefix: '/accounts', label: 'ספקים' },
   { to: '/leads', prefix: '/leads', label: 'לידים' },
-  { to: '/tickets', prefix: '/tickets', label: 'שירות לקוחות' },
+  { to: '/tickets', prefix: '/tickets', label: 'שירות ספקים' },
   { to: '/tasks/my-tasks', prefix: '/tasks', label: 'משימות' },
   { to: '/cities', prefix: '/cities', label: 'אזורים וערים' },
   { to: '/commissions', prefix: '/commissions', label: 'מחירון עמלות' },
