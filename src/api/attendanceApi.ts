@@ -160,3 +160,18 @@ export async function uploadAttendanceAttachment(
   }
   return res.json()
 }
+
+export async function listAttendanceResponsiblesInRange(
+  token?: string | null,
+  opts: { fromDate: string; toDate: string } = { fromDate: '', toDate: '' },
+) {
+  const params = new URLSearchParams()
+  if (opts.fromDate) params.set('fromDate', opts.fromDate)
+  if (opts.toDate) params.set('toDate', opts.toDate)
+  const qs = params.toString()
+  const res = await csFetch<{ names: string[] }>(
+    `/customer-service/attendance/responsibles-in-range${qs ? `?${qs}` : ''}`,
+    { token: tokenOrThrow(token) },
+  )
+  return Array.isArray(res?.names) ? res.names : []
+}

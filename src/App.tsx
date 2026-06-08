@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Box, CircularProgress, CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import ManagerProtectedRoute from './components/ManagerProtectedRoute'
+import DefaultHomeRedirect from './components/DefaultHomeRedirect'
 import AppLayout from './components/AppLayout'
 import SpaRedirectBootstrap from './components/SpaRedirectBootstrap'
 
@@ -93,28 +95,63 @@ export default function App() {
                   </ProtectedRoute>
                 )}
               >
-                <Route path="/" element={<Navigate to="/jobs/today" replace />} />
+                <Route path="/" element={<DefaultHomeRedirect />} />
                 <Route path="/jobs" element={<Navigate to="/jobs/today" replace />} />
-                <Route path="/jobs/:segment" element={<JobsPage />} />
+                <Route
+                  path="/jobs/:segment"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <JobsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
                 <Route path="/accounts/:segment" element={<AccountsPage />} />
                 <Route path="/leads" element={<LeadsPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
-                <Route path="/tasks/:tabSlug" element={<TasksPage />} />
-                <Route path="/domains" element={<DomainsPage />} />
+                <Route
+                  path="/tasks/:tabSlug"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <TasksPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
+                <Route
+                  path="/domains"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <DomainsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/cities" element={<CitiesPage />} />
                 <Route path="/commissions" element={<CommissionsPage />} />
-                <Route path="/company-employees" element={<CompanyEmployeesPage />} />
+                <Route
+                  path="/company-employees"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <CompanyEmployeesPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/dashboards" element={<Navigate to="/dashboards/leads" replace />} />
-                <Route path="/dashboards/:segment" element={<DashboardsPage />} />
+                <Route
+                  path="/dashboards/:segment"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <DashboardsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/personal-area/attendance" element={<Navigate to="/personal-area/attendance/attendance" replace />} />
                 <Route path="/personal-area/attendance/:subTab" element={<PersonalAreaPage />} />
                 <Route path="/personal-area/availability" element={<PersonalAreaPage />} />
                 <Route path="/personal-area/details" element={<Navigate to="/personal-area" replace />} />
                 <Route path="/personal-area" element={<PersonalAreaPage />} />
               </Route>
-              <Route path="*" element={<Navigate to="/jobs/today" replace />} />
+              <Route path="*" element={<DefaultHomeRedirect />} />
             </Routes>
           </Suspense>
         </BrowserRouter>

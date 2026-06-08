@@ -340,27 +340,27 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
                       <TableRow key={`${url}-${idx}`} hover>
                         <TableCell align="right">{monthYearLabelFromPayslipUrl(url)}</TableCell>
                         <TableCell align="center">
-                          <IconButton
-                            component="a"
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            size="small"
-                            sx={{ p: 0.5 }}
-                            title="פתח מסמך"
-                          >
-                            <OpenInNewIcon sx={{ fontSize: 18 }} />
-                          </IconButton>
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton
-                            onClick={() => downloadPayslipUrl(url, getPayslipDownloadFilename(url))}
-                            size="small"
-                            sx={{ p: 0.5 }}
-                            aria-label="הורדה"
-                          >
-                            <DownloadIcon sx={{ fontSize: 18 }} />
-                          </IconButton>
+                              <IconButton
+                                component="a"
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                size="small"
+                                sx={{ p: 0.5 }}
+                                title="פתח מסמך"
+                              >
+                                <OpenInNewIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </TableCell>
+                            <TableCell align="center">
+                              <IconButton
+                                onClick={() => downloadPayslipUrl(url, getPayslipDownloadFilename(url))}
+                                size="small"
+                                sx={{ p: 0.5 }}
+                                aria-label="הורדה"
+                              >
+                                <DownloadIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
                         </TableCell>
                       </TableRow>
                     ))

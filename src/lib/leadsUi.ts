@@ -56,6 +56,29 @@ export function leadStatusOptionsForForm(existingStatus: string | null | undefin
   return Array.from(merged)
 }
 
+export const LEAD_TYPE_OPTIONS = [
+  'בלי אפליקציה',
+  'עם אפליקציה ולא עשה חבילה',
+  'רכש חבילה',
+] as const
+
+export type LeadTypeOption = (typeof LEAD_TYPE_OPTIONS)[number]
+
+const LEAD_TYPE_COLOR_ENTRIES: [LeadTypeOption, { bg: string; fg: string }][] = [
+  ['בלי אפליקציה', { bg: '#90A4AE', fg: '#fff' }],
+  ['עם אפליקציה ולא עשה חבילה', { bg: '#FFA726', fg: '#fff' }],
+  ['רכש חבילה', { bg: '#2E7D32', fg: '#fff' }],
+]
+
+export const LEAD_TYPE_COLORS: Record<LeadTypeOption, { bg: string; fg: string }> = Object.fromEntries(
+  LEAD_TYPE_COLOR_ENTRIES,
+) as Record<LeadTypeOption, { bg: string; fg: string }>
+
+export function getLeadTypeColors(leadType: string | null | undefined): { bg: string; fg: string } {
+  const key = String(leadType || '').trim() as LeadTypeOption
+  return LEAD_TYPE_COLORS[key] || { bg: '#E0E0E0', fg: '#000' }
+}
+
 export function formatLeadPhoneDisplay(val: string | null | undefined): string {
   const s = String(val || '').trim()
   if (!s) return '—'

@@ -73,7 +73,14 @@ export type Lead = {
   statusUpdateDate: string | null
   created: string
   updated: string | null
+  /** מחושב לפי התאמת טלפון לטבלת accounts וקרדיטים */
+  leadType?: LeadType | null
 }
+
+export type LeadType =
+  | 'בלי אפליקציה'
+  | 'עם אפליקציה ולא עשה חבילה'
+  | 'רכש חבילה'
 
 export type Ticket = {
   id: number
@@ -560,7 +567,14 @@ export async function getPaymentLinks() {
   return csFetch<PaymentLinkRow[]>('/customer-service/payment-links')
 }
 
-export type PerfectoCustomerServiceUser = Record<string, unknown> & { id: number }
+export type PerfectoCustomerServiceUser = Record<string, unknown> & {
+  id: number
+  fullName?: string
+  username?: string
+  status?: string
+  role?: string | null
+  payslipsUrls?: string[] | null
+}
 
 const PERFECTO_CS_USERS_PATH = '/customer-service/perfecto-customer-service-users'
 
@@ -603,5 +617,46 @@ export async function listMyPayslips(token?: string | null) {
 export async function listUserPayslips(token: string | null | undefined, userId: number) {
   return csFetch<{ urls: string[] }>(`${PERFECTO_CS_USERS_PATH}/${userId}/payslips`, {
     token: payslipToken(token),
+  })
+}
+
+export async function uploadUserPayslipMonthYear(
+  userId: number,
+  file: File,
+  monthYear: string,
+  token?: string | null,
+) {
+  const t = payslipToken(token)
+  const fd = new FormData()
+  fd.append('payslip', file)
+  const q = monthYear?.trim() ? `?monthYear=${encodeURIComponent(monthYear.trim())}` : ''
+  const absolute = `${baseUrl()}${PERFECTO_CS_USERS_PATH}/${userId}/upload-payslip-month-year${q}`
+  const res = await fetch(absolute, {
+    method: 'POST',
+    headers: {
+      'X-Source': SOURCE,
+      Authorization: `Bearer ${t}`,
+    },
+    body: fd,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'העלאה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  return (await res.json()) as { url: string; urls: string[] }
+}
+
+export async function deleteUserPayslip(
+  userId: number,
+  payslipUrl: string,
+  token?: string | null,
+) {
+  return csFetch<{ ok: boolean; urls: string[] }>(`${PERFECTO_CS_USERS_PATH}/${userId}/payslips`, {
+    method: 'DELETE',
+    token: payslipToken(token),
+    body: { payslipUrl },
   })
 }

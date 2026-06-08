@@ -1,0 +1,1 @@
+function e(e){let t=String(e||``).trim().toLowerCase();return t===`מנהל`||t===`admin`||t===`administrator`||t===`superadmin`}export{e as t};

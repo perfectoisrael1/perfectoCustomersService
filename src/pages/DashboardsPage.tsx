@@ -13,6 +13,7 @@ import CustomerServiceDashboardWidgets from './dashboards/CustomerServiceDashboa
 import InquiriesDashboardWidgets from './dashboards/InquiriesDashboardWidgets'
 import LeadsDashboardWidgets from './dashboards/LeadsDashboardWidgets'
 import SuppliersDashboardWidgets from './dashboards/SuppliersDashboardWidgets'
+import PayslipsDashboardPanel from './dashboards/PayslipsDashboardPanel'
 
 const REFRESH_BUTTON_SX = {
   backgroundColor: '#FFDD00',
@@ -28,13 +29,15 @@ const REFRESH_BUTTON_SX = {
   },
 } as const
 
-type DashboardsTab = 'leads' | 'suppliers' | 'customer-service' | 'inquiries'
+type DashboardsTab = 'leads' | 'suppliers' | 'customer-service' | 'inquiries' | 'revenue' | 'payslips'
 
 const VALID_SEGMENTS: DashboardsTab[] = [
   'leads',
   'suppliers',
   'customer-service',
   'inquiries',
+  'revenue',
+  'payslips',
 ]
 
 const TAB_LABELS: Record<DashboardsTab, string> = {
@@ -42,6 +45,8 @@ const TAB_LABELS: Record<DashboardsTab, string> = {
   suppliers: 'ספקים',
   'customer-service': 'שירות ספקים',
   inquiries: 'פניות',
+  revenue: 'הכנסות',
+  payslips: 'תלושים',
 }
 
 function segmentToTab(segment: string | undefined): DashboardsTab {
@@ -61,6 +66,7 @@ export default function DashboardsPage() {
   const isSuppliersTab = tab === 'suppliers'
   const isCustomerServiceTab = tab === 'customer-service'
   const isInquiriesTab = tab === 'inquiries'
+  const isPayslipsTab = tab === 'payslips'
   const { loading: leadsLoading, error: leadsError, load: loadLeads, counts } = useLeadsDashboard(isLeadsTab)
   const {
     loading: suppliersLoading,
@@ -210,6 +216,7 @@ export default function DashboardsPage() {
                 statusBreakdown={inquiriesStatusBreakdown}
               />
             ) : null}
+            {isPayslipsTab ? <PayslipsDashboardPanel /> : null}
           </Stack>
         </CardContent>
       </Card>

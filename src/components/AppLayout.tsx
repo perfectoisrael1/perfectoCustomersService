@@ -16,6 +16,7 @@ import MenuIcon from '@mui/icons-material/Menu'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { useAuth } from '../context/useAuth'
 import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/headerLayout'
+import { isManagerRole } from '../lib/roles'
 
 const drawerWidth = 260
 
@@ -38,11 +39,24 @@ const bottomLinks: NavLink[] = [
   { to: '/dashboards/leads', prefix: '/dashboards', label: 'דשבורדים' },
 ]
 
+const MANAGER_ONLY_PREFIXES = new Set([
+  '/jobs',
+  '/tasks',
+  '/company-employees',
+  '/domains',
+  '/dashboards',
+])
+
+function filterNavLinks(links: NavLink[], isManager: boolean): NavLink[] {
+  if (isManager) return links
+  return links.filter((l) => !MANAGER_ONLY_PREFIXES.has(l.prefix))
+}
+
 const allLinks = [...mainLinks, ...bottomLinks]
 
-function pageTitleForPath(pathname: string): string {
+function pageTitleForPath(pathname: string, links: NavLink[] = allLinks): string {
   const path = pathname.replace(/\/+$/, '') || '/'
-  const hit = allLinks.find((l) => path === l.prefix || path.startsWith(`${l.prefix}/`))
+  const hit = links.find((l) => path === l.prefix || path.startsWith(`${l.prefix}/`))
   return hit?.label ?? 'פרפקטו'
 }
 
@@ -94,7 +108,18 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const pageTitle = useMemo(() => pageTitleForPath(location.pathname), [location.pathname])
+  const isManager = isManagerRole(user?.role)
+  const visibleMainLinks = useMemo(() => filterNavLinks(mainLinks, isManager), [isManager])
+  const visibleBottomLinks = useMemo(() => filterNavLinks(bottomLinks, isManager), [isManager])
+  const visibleAllLinks = useMemo(
+    () => [...visibleMainLinks, ...visibleBottomLinks],
+    [visibleMainLinks, visibleBottomLinks],
+  )
+
+  const pageTitle = useMemo(
+    () => pageTitleForPath(location.pathname, visibleAllLinks),
+    [location.pathname, visibleAllLinks],
+  )
 
   useLayoutEffect(() => {
     const el = appBarRef.current
@@ -142,11 +167,11 @@ export default function AppLayout() {
       </Toolbar>
       <Divider />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <NavList items={mainLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
+        <NavList items={visibleMainLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
       </Box>
       <Divider />
       <Box sx={{ flexShrink: 0, mt: 'auto' }}>
-        <NavList items={bottomLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
+        <NavList items={visibleBottomLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
       </Box>
     </Box>
   )

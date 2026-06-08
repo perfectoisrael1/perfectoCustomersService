@@ -27,6 +27,8 @@ import AddIcon from '@mui/icons-material/Add'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { createService, getServices, patchCategoryPromotion, patchService, patchServicePrice, type Service } from '../api/csApi'
+import { useAuth } from '../context/useAuth'
+import { isManagerRole } from '../lib/roles'
 
 type SearchOpt = { type: 'category' | 'service'; value: string; label: string }
 
@@ -93,6 +95,8 @@ function CommissionField({ label, children }: { label: string; children: ReactNo
 }
 
 export default function CommissionsPage() {
+  const { user } = useAuth()
+  const readOnly = !isManagerRole(user?.role)
   const [rows, setRows] = useState<CommissionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -483,25 +487,29 @@ export default function CommissionsPage() {
               <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
                 {loading ? 'טוען…' : `תוצאות: ${filtered.length}`}
               </Typography>
-              <Button
-                variant="contained"
-                endIcon={<AddIcon />}
-                onClick={openAddDialog}
-                sx={{
-                  whiteSpace: 'nowrap',
-                  '& .MuiButton-endIcon': {
-                    marginInlineStart: '10px',
-                    marginInlineEnd: 0,
-                  },
-                }}
-              >
-                תחום חדש
-              </Button>
+              {!readOnly ? (
+                <Button
+                  variant="contained"
+                  endIcon={<AddIcon />}
+                  onClick={openAddDialog}
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    '& .MuiButton-endIcon': {
+                      marginInlineStart: '10px',
+                      marginInlineEnd: 0,
+                    },
+                  }}
+                >
+                  תחום חדש
+                </Button>
+              ) : null}
             </Stack>
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            ניתן לערוך תחומים ומחירים. מחירים — רק להוריד, לא להעלות.
+            {readOnly
+              ? 'צפייה בלבד — אין אפשרות לערוך את המחירון.'
+              : 'ניתן לערוך תחומים ומחירים. מחירים — רק להוריד, לא להעלות.'}
           </Typography>
 
           {loading ? (
@@ -536,6 +544,7 @@ export default function CommissionsPage() {
                         highlightBg={highlightBg}
                         hasActiveSearch={hasActiveSearch}
                         searchQuery={searchQuery}
+                        readOnly={readOnly}
                         onToggle={() => toggleCategory(categoryName)}
                         getDraftPrice={getDraftValue}
                         setDraftPrice={setDraftPriceValue}
@@ -561,6 +570,7 @@ export default function CommissionsPage() {
         </Stack>
       </CardContent>
 
+      {!readOnly ? (
       <Dialog open={addDialogOpen} onClose={closeAddDialog} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, textAlign: 'right', direction: 'rtl' }}>
           הוספת תחום חדש
@@ -627,6 +637,7 @@ export default function CommissionsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      ) : null}
     </Card>
   )
 }
@@ -778,6 +789,7 @@ function FragmentRows({
   highlightBg,
   hasActiveSearch,
   searchQuery,
+  readOnly,
   onToggle,
   getDraftPrice,
   setDraftPrice,
@@ -799,6 +811,7 @@ function FragmentRows({
   highlightBg: string
   hasActiveSearch: boolean
   searchQuery: string
+  readOnly: boolean
   onToggle: () => void
   getDraftPrice: (row: CommissionRow) => string
   setDraftPrice: (rowId: number, value: string) => void
@@ -842,7 +855,14 @@ function FragmentRows({
         <TableCell align="right">{items[0]?.fixedCommissionAmount ?? '—'}</TableCell>
         <TableCell align="center" sx={{ width: 72 }}>
           <Box sx={{ display: 'flex', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
-            {savingPromotion ? (
+            {readOnly ? (
+              <Checkbox
+                checked={categoryPromotion}
+                indeterminate={categoryPromotionIndeterminate}
+                disabled
+                inputProps={{ 'aria-label': `יש ממומן ${categoryName}` }}
+              />
+            ) : savingPromotion ? (
               <CircularProgress size={20} />
             ) : (
               <Checkbox
@@ -862,24 +882,37 @@ function FragmentRows({
           return (
             <TableRow key={`${categoryName}-${r.id}`} sx={{ backgroundColor: rowBg }}>
               <TableCell align="right" sx={{ pr: 4, backgroundColor: rowBg }} />
-              <EditableServiceCell
-                row={r}
-                rowBg={rowBg}
-                draftValue={getDraftService(r)}
-                saving={savingServiceIds.has(r.id)}
-                errorText={rowServiceErrors[r.id]}
-                onDraftChange={(value) => setDraftService(r.id, value)}
-                onSave={() => void onSaveService(r)}
-              />
-              <EditablePriceCell
-                row={r}
-                rowBg={rowBg}
-                draftValue={getDraftPrice(r)}
-                saving={savingPriceIds.has(r.id)}
-                errorText={rowPriceErrors[r.id]}
-                onDraftChange={(value) => setDraftPrice(r.id, value)}
-                onSave={() => void onSavePrice(r)}
-              />
+              {readOnly ? (
+                <>
+                  <TableCell align="right" sx={{ backgroundColor: rowBg }}>
+                    {r.serviceName}
+                  </TableCell>
+                  <TableCell align="right" sx={{ backgroundColor: rowBg }}>
+                    {formatPrice(r.price)}
+                  </TableCell>
+                </>
+              ) : (
+                <>
+                  <EditableServiceCell
+                    row={r}
+                    rowBg={rowBg}
+                    draftValue={getDraftService(r)}
+                    saving={savingServiceIds.has(r.id)}
+                    errorText={rowServiceErrors[r.id]}
+                    onDraftChange={(value) => setDraftService(r.id, value)}
+                    onSave={() => void onSaveService(r)}
+                  />
+                  <EditablePriceCell
+                    row={r}
+                    rowBg={rowBg}
+                    draftValue={getDraftPrice(r)}
+                    saving={savingPriceIds.has(r.id)}
+                    errorText={rowPriceErrors[r.id]}
+                    onDraftChange={(value) => setDraftPrice(r.id, value)}
+                    onSave={() => void onSavePrice(r)}
+                  />
+                </>
+              )}
               <TableCell align="right" sx={{ backgroundColor: rowBg }}>{r.minimumCommission != null ? `${r.minimumCommission} ₪` : '—'}</TableCell>
               <TableCell align="right" sx={{ backgroundColor: rowBg }}>{r.fixedCommissionAmount ?? '—'}</TableCell>
               <TableCell align="center" sx={{ backgroundColor: rowBg }} />

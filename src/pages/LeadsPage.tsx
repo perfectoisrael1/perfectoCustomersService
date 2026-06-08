@@ -10,6 +10,8 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  MenuItem,
+  Select,
   Stack,
   Tab,
   Table,
@@ -28,8 +30,10 @@ import SearchIcon from '@mui/icons-material/Search'
 import LeadEditDialog from '../components/LeadEditDialog'
 import {
   LEAD_PHONE_EMPHASIS,
+  LEAD_TYPE_OPTIONS,
   formatLeadPhoneDisplay,
   getLeadStatusColors,
+  getLeadTypeColors,
 } from '../lib/leadsUi'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import CsTableContainer from '../components/CsStandardTable'
@@ -57,6 +61,7 @@ type LeadsSortColumn =
   | 'category'
   | 'followUpDate'
   | 'status'
+  | 'leadType'
   | 'details'
   | 'created'
   | 'responsible'
@@ -73,6 +78,8 @@ function leadSortValue(row: Lead, col: LeadsSortColumn): string {
       return row.followUpDate ? String(row.followUpDate).slice(0, 19) : ''
     case 'status':
       return String(row.status ?? '')
+    case 'leadType':
+      return String(row.leadType ?? '')
     case 'details':
       return String(row.details ?? '')
     case 'created':
@@ -178,7 +185,7 @@ export default function LeadsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return tabRows
     return tabRows.filter((r) => {
-      const blob = [r.name, r.phone, r.businessName, r.status, r.responsible, r.category, r.details]
+      const blob = [r.name, r.phone, r.businessName, r.status, r.responsible, r.category, r.details, r.leadType]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
       const qd = q.replace(/\D/g, '')
@@ -281,7 +288,7 @@ export default function LeadsPage() {
     }
   }
 
-  const colSpan = 8
+  const colSpan = 9
 
   return (
     <>
@@ -491,6 +498,15 @@ export default function LeadsPage() {
                               סטטוס
                             </TableSortLabel>
                           </TableCell>
+                          <TableCell align="center" sortDirection={sort.col === 'leadType' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'leadType'}
+                              direction={sort.col === 'leadType' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('leadType')}
+                            >
+                              סוג הליד
+                            </TableSortLabel>
+                          </TableCell>
                           <TableCell sortDirection={sort.col === 'details' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'details'}
@@ -523,6 +539,8 @@ export default function LeadsPage() {
                       <TableBody>
                         {pageRows.map((row) => {
                           const statusColors = getLeadStatusColors(row.status)
+                          const leadTypeValue = row.leadType || 'בלי אפליקציה'
+                          const leadTypeColors = getLeadTypeColors(leadTypeValue)
                           return (
                             <TableRow
                               key={row.id}
@@ -561,6 +579,68 @@ export default function LeadsPage() {
                                     fontWeight: 700,
                                   }}
                                 />
+                              </TableCell>
+                              <TableCell
+                                align="center"
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                sx={{
+                                  backgroundColor: `${leadTypeColors.bg} !important`,
+                                  color: `${leadTypeColors.fg} !important`,
+                                  textAlign: 'center !important',
+                                  py: 0.5,
+                                  px: 0.5,
+                                  verticalAlign: 'middle',
+                                  overflow: 'hidden',
+                                  minWidth: 180,
+                                  '& > *': { backgroundColor: 'transparent !important' },
+                                }}
+                              >
+                                <Select
+                                  size="small"
+                                  value={leadTypeValue}
+                                  disabled
+                                  variant="standard"
+                                  disableUnderline
+                                  sx={{
+                                    color: 'inherit',
+                                    fontWeight: 'normal',
+                                    fontSize: 14,
+                                    width: '100%',
+                                    '& .MuiSelect-select': {
+                                      py: 0,
+                                      textAlign: 'center',
+                                      pr: '0 !important',
+                                      pl: '0 !important',
+                                    },
+                                    '& .MuiSelect-icon': { display: 'none' },
+                                    '&.Mui-disabled': { color: 'inherit', WebkitTextFillColor: 'inherit' },
+                                  }}
+                                >
+                                  {LEAD_TYPE_OPTIONS.map((opt) => {
+                                    const colors = getLeadTypeColors(opt)
+                                    return (
+                                      <MenuItem
+                                        key={opt}
+                                        value={opt}
+                                        sx={{
+                                          backgroundColor: colors.bg,
+                                          color: colors.fg,
+                                          fontWeight: 'normal',
+                                          fontSize: 14,
+                                          borderRadius: 1.5,
+                                          minHeight: 44,
+                                          justifyContent: 'center',
+                                          textAlign: 'center',
+                                          whiteSpace: 'normal',
+                                          px: 1,
+                                        }}
+                                      >
+                                        {opt}
+                                      </MenuItem>
+                                    )
+                                  })}
+                                </Select>
                               </TableCell>
                               <TableCell sx={{ maxWidth: 280 }} title={row.details || ''}>
                                 {row.details || '—'}
