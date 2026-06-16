@@ -483,7 +483,7 @@ export default function CommissionsPage() {
 
           <Stack sx={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="h6" sx={{ fontWeight: 800 }}>כל העמלות</Typography>
-            <Stack direction="row" spacing={3} alignItems="center">
+            <Stack direction="row" spacing={3} sx={{ alignItems: 'center' }}>
               <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
                 {loading ? 'טוען…' : `תוצאות: ${filtered.length}`}
               </Typography>
@@ -860,7 +860,7 @@ function FragmentRows({
                 checked={categoryPromotion}
                 indeterminate={categoryPromotionIndeterminate}
                 disabled
-                inputProps={{ 'aria-label': `יש ממומן ${categoryName}` }}
+                slotProps={{ input: { 'aria-label': `יש ממומן ${categoryName}` } }}
               />
             ) : savingPromotion ? (
               <CircularProgress size={20} />
@@ -869,7 +869,7 @@ function FragmentRows({
                 checked={categoryPromotion}
                 indeterminate={categoryPromotionIndeterminate}
                 onChange={(_e, checked) => void onPromotionChange(categoryName, checked)}
-                inputProps={{ 'aria-label': `יש ממומן ${categoryName}` }}
+                slotProps={{ input: { 'aria-label': `יש ממומן ${categoryName}` } }}
               />
             )}
           </Box>

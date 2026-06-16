@@ -686,7 +686,7 @@ export default function TicketsPage() {
               sx={{ flex: 1, minWidth: 0 }}
             />
           </Stack>
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%', direction: 'rtl' }}>
+          <Stack direction="row" spacing={2} sx={{ width: '100%', direction: 'rtl', alignItems: 'center' }}>
             <TextField
               select
               label="סוג הבעיה"

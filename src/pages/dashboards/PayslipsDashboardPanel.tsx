@@ -225,7 +225,7 @@ export default function PayslipsDashboardPanel() {
                     setUploadError(null)
                     setUploadSuccess(false)
                   }}
-                  MenuProps={{ PaperProps: { sx: { maxHeight: 320 } } }}
+                  MenuProps={{ slotProps: { paper: { sx: { maxHeight: 320 } } } }}
                   sx={{ direction: 'rtl', '& .MuiSelect-select': { textAlign: 'right' } }}
                 >
                   {payslipUploadMonthOptions.map((opt) => (
