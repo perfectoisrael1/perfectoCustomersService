@@ -45,6 +45,65 @@ export const LEADS_STATUS_COLORS: Record<string, { bg: string; fg: string }> = O
   STATUS_COLOR_ENTRIES,
 )
 
+/** מזהי תצוגות סטטוס בטאב לידים — סדר הרשימה קובע סדר הטאבים */
+export type LeadStatusViewId =
+  | 'status-new'
+  | 'status-no-answer'
+  | 'status-follow-up'
+  | 'status-paid'
+  | 'status-not-interested'
+
+export type LeadStatusViewConfig = {
+  id: LeadStatusViewId
+  label: string
+  statuses: readonly string[]
+}
+
+/** קיבוץ סטטוסים לתצוגות בטאב לידים */
+export const LEAD_STATUS_VIEWS: readonly LeadStatusViewConfig[] = [
+  { id: 'status-new', label: 'חדש', statuses: ['חדש'] },
+  { id: 'status-no-answer', label: 'אין מענה', statuses: ['אין מענה', 'אמ 2', 'אמ 3'] },
+  { id: 'status-follow-up', label: 'לחזור אליו', statuses: ['לחזור אליו', 'מעוניין מחכים לתשלום'] },
+  { id: 'status-paid', label: 'שילם', statuses: ['שילם', 'שילם בהעברה'] },
+  { id: 'status-not-interested', label: 'לא מעוניין', statuses: ['לא מעוניין', 'לא מעוניין דמי הקמה'] },
+]
+
+const STATUS_TO_VIEW_ID = new Map<string, LeadStatusViewId>(
+  LEAD_STATUS_VIEWS.flatMap((view) => view.statuses.map((status) => [status, view.id] as const)),
+)
+
+const LEAD_STATUS_VIEW_BY_ID = Object.fromEntries(
+  LEAD_STATUS_VIEWS.map((view) => [view.id, view]),
+) as Record<LeadStatusViewId, LeadStatusViewConfig>
+
+export function isLeadStatusViewId(value: string | null | undefined): value is LeadStatusViewId {
+  return Boolean(value && value in LEAD_STATUS_VIEW_BY_ID)
+}
+
+export function getLeadStatusViewId(status: string | null | undefined): LeadStatusViewId | null {
+  return STATUS_TO_VIEW_ID.get(String(status || '').trim()) ?? null
+}
+
+export function getLeadStatusViewLabel(status: string | null | undefined): string {
+  const viewId = getLeadStatusViewId(status)
+  if (!viewId) return String(status || '').trim() || '—'
+  return LEAD_STATUS_VIEW_BY_ID[viewId].label
+}
+
+export function leadMatchesStatusView(
+  status: string | null | undefined,
+  viewId: LeadStatusViewId,
+): boolean {
+  const view = LEAD_STATUS_VIEW_BY_ID[viewId]
+  const st = String(status || '').trim()
+  return view.statuses.includes(st)
+}
+
+export function getLeadStatusViewColors(viewId: LeadStatusViewId): { bg: string; fg: string } {
+  const view = LEAD_STATUS_VIEW_BY_ID[viewId]
+  return getLeadStatusColors(view.statuses[0])
+}
+
 export function getLeadStatusColors(status: string | null | undefined): { bg: string; fg: string } {
   return LEADS_STATUS_COLORS[String(status || '').trim()] || { bg: '#E0E0E0', fg: '#000' }
 }

@@ -22,6 +22,7 @@ import {
   TextField,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import AddIcon from '@mui/icons-material/Add'
 import SearchIcon from '@mui/icons-material/Search'
 import { useTheme } from '@mui/material/styles'
 import {
@@ -32,6 +33,7 @@ import {
 } from '../lib/caliberUi'
 import {
   getAccounts,
+  createAccount,
   deleteAccount,
   patchAccount,
   getCities,
@@ -102,7 +104,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [editor, setEditor] = useState<Account | null>(null)
+  const [editor, setEditor] = useState<Account | 'new' | null>(null)
   const [form, setForm] = useState<AccountInput>({})
   const [saving, setSaving] = useState(false)
   const [catalogServices, setCatalogServices] = useState<Service[]>([])
@@ -211,6 +213,29 @@ export default function AccountsPage() {
     [rows],
   )
 
+  const openNew = () => {
+    setForm({
+      accountName: '',
+      phoneNumber: '',
+      password: '',
+      certificateNumber: '',
+      businessName: '',
+      email: '',
+      about: '',
+      specialtiesCategory: '',
+      specialties: null,
+      workingAreas: null,
+      workingHours: null,
+      perfectoStatus: 'active',
+      availability: 1,
+      credits: 0,
+      payPerLead: null,
+      yearsOfExperience: null,
+      slug: '',
+    })
+    setEditor('new')
+  }
+
   const openEdit = (row: Account) => {
     setForm({
       accountName: row.accountName,
@@ -246,11 +271,14 @@ export default function AccountsPage() {
   }
 
   const handleSave = async () => {
-    if (!editor) return
     setSaving(true)
     setError(null)
     try {
-      await patchAccount(editor.id, form)
+      if (editor === 'new') {
+        await createAccount(form)
+      } else if (editor) {
+        await patchAccount(editor.id, form)
+      }
       setEditor(null)
       await load()
     } catch (err) {
@@ -261,7 +289,7 @@ export default function AccountsPage() {
   }
 
   const handleDelete = async () => {
-    if (!editor) return
+    if (!editor || editor === 'new') return
     if (!window.confirm('האם אתה בטוח?')) return
     setSaving(true)
     setError(null)
@@ -321,25 +349,49 @@ export default function AccountsPage() {
                     width: '100%',
                   }}
                 >
-                  <Tabs
-                    value={tab}
-                    onChange={(_e, v) => {
-                      const next = v as AccountTab
-                      navigate(next === 'today' ? '/accounts/today' : '/accounts/businesses')
-                    }}
-                    variant="scrollable"
-                    allowScrollButtonsMobile
+                  <Box
                     sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
                       flex: '1 1 auto',
                       minWidth: { xs: 'min(100%, 280px)', sm: 120 },
-                      borderBottom: 'none',
-                      minHeight: 48,
-                      '& .MuiTabs-indicator': { height: 3 },
+                      direction: 'rtl',
                     }}
                   >
-                    <Tab value="customers" label={`כל הספקים (${counts.customers})`} />
-                    <Tab value="today" label={`הצטרפויות היום (${counts.today})`} />
-                  </Tabs>
+                    <IconButton
+                      color="primary"
+                      onClick={openNew}
+                      aria-label="ספק חדש"
+                      sx={{
+                        flexShrink: 0,
+                        bgcolor: 'primary.main',
+                        color: '#fff',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                      }}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                    <Tabs
+                      value={tab}
+                      onChange={(_e, v) => {
+                        const next = v as AccountTab
+                        navigate(next === 'today' ? '/accounts/today' : '/accounts/businesses')
+                      }}
+                      variant="scrollable"
+                      allowScrollButtonsMobile
+                      sx={{
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        borderBottom: 'none',
+                        minHeight: 48,
+                        '& .MuiTabs-indicator': { height: 3 },
+                      }}
+                    >
+                      <Tab value="customers" label={`כל הספקים (${counts.customers})`} />
+                      <Tab value="today" label={`הצטרפויות היום (${counts.today})`} />
+                    </Tabs>
+                  </Box>
 
                   <Box
                     sx={{

@@ -337,6 +337,10 @@ export async function patchAccount(id: number, body: AccountInput) {
   return csFetch<Account>(`/customer-service/accounts/${id}`, { method: 'PATCH', body })
 }
 
+export async function createAccount(body: AccountInput) {
+  return csFetch<Account>('/customer-service/accounts', { method: 'POST', body })
+}
+
 export async function getLeads(created?: 'today') {
   if (created === 'today') {
     const params = new URLSearchParams()

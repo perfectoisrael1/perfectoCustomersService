@@ -35,7 +35,7 @@ import { STANDARD_TABLE_BODY_FONT_PX } from '../lib/leadsUi'
 
 type Props = {
   open: boolean
-  account: Account | null
+  account: Account | 'new' | null
   form: AccountInput
   setForm: React.Dispatch<React.SetStateAction<AccountInput>>
   saving: boolean
@@ -50,10 +50,12 @@ const Field = ({
   label,
   children,
   fullWidth,
+  required,
 }: {
   label: string
   children: React.ReactNode
   fullWidth?: boolean
+  required?: boolean
 }) => (
   <Box
     sx={{
@@ -66,7 +68,9 @@ const Field = ({
     }}
   >
     <Typography
+      component="label"
       sx={{
+        display: 'block',
         fontSize: 14,
         fontWeight: 700,
         color: ACCOUNTS_DIALOG_ACCENT,
@@ -76,6 +80,11 @@ const Field = ({
       }}
     >
       {label}
+      {required ? (
+        <Box component="span" sx={{ color: 'error.main', fontWeight: 700 }}>
+          {' *'}
+        </Box>
+      ) : null}
     </Typography>
     {children}
   </Box>
@@ -110,12 +119,16 @@ export default function AccountEditDialog({
   onDelete,
 }: Props) {
   const [tab, setTab] = useState<AccountTabKey>('phone')
+  const isNew = account === 'new'
+  const existingAccount: Account | null = account !== 'new' && account ? account : null
 
   useEffect(() => {
     if (open) setTab('phone')
-  }, [open, account?.id])
+  }, [open, existingAccount?.id])
 
-  const title = form.accountName || account?.accountName || 'פרטי ספק'
+  const title = isNew
+    ? 'ספק חדש'
+    : form.accountName || existingAccount?.accountName || 'פרטי ספק'
   const statusOptions = accountStatusOptionsForForm(form.perfectoStatus)
   const statusDisplay = accountStatusChipColors(form.perfectoStatus)
 
@@ -145,7 +158,7 @@ export default function AccountEditDialog({
 
   const renderPhoneTab = () => (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-      <Field label="שם">
+      <Field label="שם" required={isNew}>
         <TextField
           fullWidth
           size="small"
@@ -155,7 +168,7 @@ export default function AccountEditDialog({
           slotProps={{ input: rtlInput }}
         />
       </Field>
-      <Field label="טלפון">
+      <Field label="טלפון" required={isNew}>
         <TextField
           fullWidth
           size="small"
@@ -165,7 +178,7 @@ export default function AccountEditDialog({
           slotProps={{ input: phoneInput }}
         />
       </Field>
-      <Field label="סיסמה">
+      <Field label="סיסמה" required={isNew}>
         <TextField
           fullWidth
           size="small"
@@ -173,10 +186,10 @@ export default function AccountEditDialog({
           onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           sx={accountFieldInputSx}
           slotProps={{ input: ltrInput }}
-          helperText="מינימום 8 תווים. נקה את השדה כדי לא לשנות את הסיסמה"
+          helperText={isNew ? 'מינימום 8 תווים' : 'מינימום 8 תווים. נקה את השדה כדי לא לשנות את הסיסמה'}
         />
       </Field>
-      <Field label="מספר ת.ז / ח.פ">
+      <Field label="מספר ת.ז / ח.פ" required={isNew}>
         <TextField
           fullWidth
           size="small"
@@ -201,105 +214,32 @@ export default function AccountEditDialog({
           sx={accountFieldInputSx}
         />
       </Field>
-      <Field label="עלות לליד">
-        <TextField
-          fullWidth
-          size="small"
-          type="number"
-          value={form.payPerLead ?? ''}
-          onChange={(e) =>
-            setForm((f) => ({
-              ...f,
-              payPerLead: e.target.value === '' ? null : Number.parseInt(e.target.value, 10),
-            }))
-          }
-          sx={accountFieldInputSx}
-        />
-      </Field>
+      {!isNew ? (
+        <Field label="עלות לליד">
+          <TextField
+            fullWidth
+            size="small"
+            type="number"
+            value={form.payPerLead ?? ''}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                payPerLead: e.target.value === '' ? null : Number.parseInt(e.target.value, 10),
+              }))
+            }
+            sx={accountFieldInputSx}
+          />
+        </Field>
+      ) : null}
       <Field label="תאריך הצטרפות">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.secondary' }}>
-          {account?.createdAt || '—'}
+          {isNew ? '—' : existingAccount?.createdAt || '—'}
         </Typography>
       </Field>
       <Field label="עודכן לאחרונה">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.secondary' }}>
-          {account?.updatedAt || '—'}
+          {isNew ? '—' : existingAccount?.updatedAt || '—'}
         </Typography>
-      </Field>
-    </Box>
-  )
-
-  const renderBusinessTab = () => (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-      <Field label="שם העסק">
-        <TextField
-          fullWidth
-          size="small"
-          value={form.businessName || ''}
-          onChange={(e) => setForm((f) => ({ ...f, businessName: e.target.value || null }))}
-          sx={accountFieldInputSx}
-          slotProps={{ input: rtlInput }}
-        />
-      </Field>
-      <Field label="אימייל">
-        <TextField
-          fullWidth
-          size="small"
-          value={form.email || ''}
-          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value || null }))}
-          sx={accountFieldInputSx}
-          slotProps={{ input: rtlInput }}
-        />
-      </Field>
-      <Field label="שנות ניסיון">
-        <TextField
-          fullWidth
-          size="small"
-          type="number"
-          value={form.yearsOfExperience ?? ''}
-          onChange={(e) =>
-            setForm((f) => ({
-              ...f,
-              yearsOfExperience: e.target.value === '' ? null : Number.parseInt(e.target.value, 10),
-            }))
-          }
-          sx={accountFieldInputSx}
-        />
-      </Field>
-      <Field label="slug (קישור פרופיל)">
-        <TextField
-          fullWidth
-          size="small"
-          value={form.slug || ''}
-          onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value || null }))}
-          sx={accountFieldInputSx}
-          slotProps={{ input: rtlInput }}
-        />
-      </Field>
-      <Field label="קצת על העסק" fullWidth>
-        <TextField
-          fullWidth
-          multiline
-          minRows={3}
-          maxRows={8}
-          value={form.about || ''}
-          onChange={(e) => setForm((f) => ({ ...f, about: e.target.value || null }))}
-          sx={accountFieldInputSx}
-          slotProps={{ input: rtlInput }}
-        />
-      </Field>
-      <Field label="שעות פעילות (JSON)" fullWidth>
-        <TextField
-          fullWidth
-          multiline
-          minRows={3}
-          maxRows={10}
-          value={form.workingHours || ''}
-          onChange={(e) => setForm((f) => ({ ...f, workingHours: e.target.value || null }))}
-          placeholder='לדוגמה: {"ראשון":{"enabled":true,"start":"08:00","end":"18:00"}}'
-          sx={accountFieldInputSx}
-          slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13, direction: 'ltr' } } }}
-        />
       </Field>
     </Box>
   )
@@ -455,11 +395,9 @@ export default function AccountEditDialog({
   const tabContent =
     tab === 'phone'
       ? renderPhoneTab()
-      : tab === 'business'
-        ? renderBusinessTab()
-        : tab === 'domains'
-          ? renderDomainsTab()
-          : renderStatusTab()
+      : tab === 'domains'
+        ? renderDomainsTab()
+        : renderStatusTab()
 
   return (
     <Dialog
@@ -483,12 +421,12 @@ export default function AccountEditDialog({
       <CsDialogTitleWithMenu
         heading={(
           <Typography sx={{ fontWeight: 800, fontSize: 18, color: ACCOUNTS_DIALOG_ACCENT }}>
-            {`הפרטים של ${title}`}
+            {isNew ? title : `הפרטים של ${title}`}
           </Typography>
         )}
         onClose={() => !saving && onClose()}
         closeDisabled={saving}
-        onRequestDelete={() => void onDelete()}
+        onRequestDelete={isNew ? undefined : () => void onDelete()}
         menuDisabled={saving}
         dialogTitleSx={{
           background: (theme) =>
@@ -548,7 +486,7 @@ export default function AccountEditDialog({
               '&:hover': { bgcolor: '#1565c0' },
             }}
           >
-            {saving ? 'שומר…' : 'שמירה'}
+            {saving ? 'שומר…' : isNew ? 'יצירה' : 'שמירה'}
           </Button>
         </Stack>
       </DialogActions>

@@ -111,6 +111,53 @@ export function accountMatchesDomain(
   )
 }
 
+type AccountCityDomainFields = {
+  workingAreas: string | null | undefined
+  specialties: string | null | undefined
+  specialtiesCategory: string | null | undefined
+}
+
+type AccountSupplierDisplayFields = AccountCityDomainFields & {
+  accountName: string
+  perfectoStatus: string | null | undefined
+  accountStatus: string | null | undefined
+  availability: string | number | null | undefined
+  credits: number | null | undefined
+}
+
+export function accountMatchesCityAndDomain(
+  account: AccountCityDomainFields,
+  city: string,
+  domain: string,
+): boolean {
+  return (
+    accountMatchesCity(account.workingAreas, city) &&
+    accountMatchesDomain(account.specialties, account.specialtiesCategory, domain)
+  )
+}
+
+export function formatAccountDomainsDisplay(account: AccountCityDomainFields): string {
+  const parts = [...parseJsonStringArrayField(account.specialties)]
+  const cat = String(account.specialtiesCategory || '').trim()
+  if (cat && !parts.some((p) => p === cat)) parts.unshift(cat)
+  return parts.length ? parts.join(', ') : '—'
+}
+
+export function formatAccountCitiesDisplay(account: Pick<AccountCityDomainFields, 'workingAreas'>): string {
+  const cities = parseJsonStringArrayField(account.workingAreas)
+  return cities.length ? cities.join(', ') : '—'
+}
+
+export function formatAccountStatusAvailabilityDisplay(
+  account: Pick<AccountSupplierDisplayFields, 'perfectoStatus' | 'accountStatus' | 'availability'>,
+): string {
+  const status = mapAccountStatusLabel(account.perfectoStatus || account.accountStatus)
+  const avKey = String(account.availability ?? '').trim()
+  const av = AVAILABILITY_OPTIONS.find((o) => o.value === avKey)
+  const avLabel = av?.label ?? (avKey || '—')
+  return `${status} · ${avLabel}`
+}
+
 export const accountFieldInputSx = {
   mt: 0.5,
   '& .MuiOutlinedInput-root': {
@@ -122,11 +169,10 @@ export const accountFieldInputSx = {
   },
 } as const
 
-export type AccountTabKey = 'phone' | 'business' | 'domains' | 'status'
+export type AccountTabKey = 'phone' | 'domains' | 'status'
 
 export const ACCOUNT_EDIT_TABS: { key: AccountTabKey; title: string }[] = [
   { key: 'phone', title: 'טלפון' },
-  { key: 'business', title: 'פרטי עסק' },
   { key: 'domains', title: 'תחומים וערים' },
   { key: 'status', title: 'סטטוס וזמינות' },
 ]

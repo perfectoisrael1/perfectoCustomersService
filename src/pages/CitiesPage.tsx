@@ -1,24 +1,28 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { FilterOptionsState } from '@mui/material/useAutocomplete'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Stack,
-  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
 import { useTheme } from '@mui/material/styles'
-import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import {
   getAccounts,
   getCities,
@@ -28,33 +32,46 @@ import {
   type Service,
 } from '../api/csApi'
 import {
-  accountMatchesAnyCity,
-  accountMatchesCity,
-  accountMatchesDomain,
+  accountMatchesCityAndDomain,
+  formatAccountCitiesDisplay,
+  formatAccountDomainsDisplay,
+  formatAccountStatusAvailabilityDisplay,
 } from '../lib/accountsUi'
 import { csDataTableSx } from '../lib/csTableUi'
 
-type CityTab = 'list' | 'domains'
-
 type BreakdownRow = { label: string; count: number }
 
-type DrillDownFilter =
-  | { kind: 'city'; label: string }
-  | { kind: 'region'; label: string }
-  | { kind: 'domain'; label: string }
+const DOMAIN_PICKER_ANCHOR = 'אינסטלציה'
+const DOMAIN_PICKER_SUGGESTION_COUNT = 5
+const SUPPLIER_ROW_HIGHLIGHT_MIN = 3
+const SUPPLIER_ROW_HIGHLIGHT_BG = '#E8F5E9'
 
-const clickableCellSx = {
-  cursor: 'pointer',
-  color: 'primary.main',
-  fontWeight: 600,
-  '&:hover': { textDecoration: 'underline' },
-} as const
-
-function highlightCellSx(hasSuppliers: boolean) {
+function supplierRowHighlightSx(active: boolean) {
+  if (!active) return undefined
+  const bg = `${SUPPLIER_ROW_HIGHLIGHT_BG} !important`
   return {
-    ...clickableCellSx,
-    textDecoration: hasSuppliers ? 'underline' : 'none',
+    backgroundColor: bg,
+    '& td': { backgroundColor: bg },
+    '&:hover': { backgroundColor: bg },
+    '&:hover td': { backgroundColor: bg },
   }
+}
+
+function buildDomainPickerSuggestions(allDomains: string[]): string[] {
+  const unique = Array.from(
+    new Set([DOMAIN_PICKER_ANCHOR, ...allDomains.map((d) => d.trim()).filter(Boolean)]),
+  )
+  const anchor = unique.find((d) => d === DOMAIN_PICKER_ANCHOR) ?? DOMAIN_PICKER_ANCHOR
+  const rest = unique
+    .filter((d) => d !== anchor)
+    .sort((a, b) => a.localeCompare(b, 'he'))
+    .slice(0, DOMAIN_PICKER_SUGGESTION_COUNT - 1)
+  return [anchor, ...rest].slice(0, DOMAIN_PICKER_SUGGESTION_COUNT)
+}
+
+function domainAutocompleteOptions(allDomains: string[]): string[] {
+  const set = new Set<string>([DOMAIN_PICKER_ANCHOR, ...allDomains])
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
 }
 
 function buildDomainOptions(services: Service[]): string[] {
@@ -77,26 +94,30 @@ function uniqueCatalogCities(rows: City[]): string[] {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
 }
 
-function countSuppliersInCity(accounts: Account[], city: string): number {
-  return accounts.filter((a) => accountMatchesCity(a.workingAreas, city)).length
-}
+type SuppliersPopup = { domain: string; city: string }
+
+const countCellClickableSx = {
+  cursor: 'pointer',
+  color: 'primary.main',
+  fontWeight: 700,
+  textDecoration: 'underline',
+  '&:hover': { opacity: 0.85 },
+} as const
 
 function countSuppliersInCityAndDomain(
   accounts: Account[],
   city: string,
   domain: string,
 ): number {
-  return accounts.filter(
-    (a) =>
-      accountMatchesCity(a.workingAreas, city) &&
-      accountMatchesDomain(a.specialties, a.specialtiesCategory, domain),
-  ).length
+  return accounts.filter((a) => accountMatchesCityAndDomain(a, city, domain)).length
 }
 
-function countSuppliersInDomain(accounts: Account[], domain: string): number {
-  return accounts.filter((a) =>
-    accountMatchesDomain(a.specialties, a.specialtiesCategory, domain),
-  ).length
+function suppliersInCityAndDomain(
+  accounts: Account[],
+  city: string,
+  domain: string,
+): Account[] {
+  return accounts.filter((a) => accountMatchesCityAndDomain(a, city, domain))
 }
 
 function sortBreakdownRows(rows: BreakdownRow[]): BreakdownRow[] {
@@ -106,20 +127,18 @@ function sortBreakdownRows(rows: BreakdownRow[]): BreakdownRow[] {
   })
 }
 
-function drillDownTitle(filter: DrillDownFilter): string {
-  if (filter.kind === 'city') return `תחומים בעיר: ${filter.label}`
-  if (filter.kind === 'region') return `ערים באזור: ${filter.label}`
-  return `ערים בתחום: ${filter.label}`
-}
-
 function BreakdownTable({
   rows,
   nameColumn,
   emptyMessage,
+  highlightMinCount,
+  onCountClick,
 }: {
   rows: BreakdownRow[]
   nameColumn: string
   emptyMessage: string
+  highlightMinCount?: number
+  onCountClick?: (city: string, count: number) => void
 }) {
   const theme = useTheme()
 
@@ -141,12 +160,30 @@ function BreakdownTable({
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.label} hover>
+          {rows.map((row) => {
+            const highlightRow =
+              highlightMinCount != null && row.count >= highlightMinCount
+            return (
+            <TableRow
+              key={row.label}
+              hover
+              sx={supplierRowHighlightSx(highlightRow)}
+            >
               <TableCell>{row.label}</TableCell>
-              <TableCell>{row.count}</TableCell>
+              <TableCell
+                onClick={
+                  row.count > 0 && onCountClick
+                    ? () => onCountClick(row.label, row.count)
+                    : undefined
+                }
+                sx={row.count > 0 && onCountClick ? countCellClickableSx : undefined}
+                title={row.count > 0 && onCountClick ? 'הצג רשימת ספקים' : undefined}
+              >
+                {row.count}
+              </TableCell>
             </TableRow>
-          ))}
+            )
+          })}
         </TableBody>
       </Table>
     </TableContainer>
@@ -160,10 +197,8 @@ export default function CitiesPage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<CityTab>('list')
-  const [query, setQuery] = useState('')
-  const [domainQuery, setDomainQuery] = useState('')
-  const [drillDown, setDrillDown] = useState<DrillDownFilter | null>(null)
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null)
+  const [suppliersPopup, setSuppliersPopup] = useState<SuppliersPopup | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -184,282 +219,165 @@ export default function CitiesPage() {
     void load()
   }, [load])
 
-  const filteredList = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(
-      (r) =>
-        String(r.city || '').toLowerCase().includes(q) ||
-        String(r.region || '').toLowerCase().includes(q),
-    )
-  }, [rows, query])
-
   const catalogCities = useMemo(() => uniqueCatalogCities(rows), [rows])
 
-  const citiesByRegion = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const r of rows) {
-      const region = String(r.region || '—').trim() || '—'
-      const city = String(r.city || '').trim()
-      if (!city) continue
-      if (!map.has(region)) map.set(region, [])
-      const list = map.get(region)!
-      if (!list.includes(city)) list.push(city)
-    }
-    return map
-  }, [rows])
-
-  const citiesWithSuppliers = useMemo(() => {
-    const set = new Set<string>()
-    for (const city of catalogCities) {
-      if (countSuppliersInCity(accounts, city) > 0) set.add(city)
-    }
-    return set
-  }, [catalogCities, accounts])
-
-  const regionsWithSuppliers = useMemo(() => {
-    const set = new Set<string>()
-    for (const [region, cities] of citiesByRegion) {
-      if (accounts.some((a) => accountMatchesAnyCity(a.workingAreas, cities))) {
-        set.add(region)
-      }
-    }
-    return set
-  }, [citiesByRegion, accounts])
-
-  const regionKey = (region: string | null | undefined) =>
-    String(region || '—').trim() || '—'
-
   const domainOptions = useMemo(() => buildDomainOptions(services), [services])
-
-  const domainsWithSuppliers = useMemo(() => {
-    const set = new Set<string>()
-    for (const domain of domainOptions) {
-      if (countSuppliersInDomain(accounts, domain) > 0) set.add(domain)
-    }
-    return set
-  }, [domainOptions, accounts])
-
-  const filteredDomains = useMemo(() => {
-    const q = domainQuery.trim().toLowerCase()
-    if (!q) return domainOptions
-    return domainOptions.filter((d) => d.toLowerCase().includes(q))
-  }, [domainOptions, domainQuery])
-
-  const breakdownRows = useMemo((): BreakdownRow[] => {
-    if (!drillDown) return []
-
-    if (drillDown.kind === 'city') {
-      return sortBreakdownRows(
-        domainOptions
-          .map((domain) => ({
-            label: domain,
-            count: countSuppliersInCityAndDomain(accounts, drillDown.label, domain),
-          }))
-          .filter((r) => r.count > 0),
-      )
-    }
-
-    if (drillDown.kind === 'domain') {
-      return sortBreakdownRows(
-        catalogCities
-          .map((city) => ({
-            label: city,
-            count: countSuppliersInCityAndDomain(accounts, city, drillDown.label),
-          }))
-          .filter((r) => r.count > 0),
-      )
-    }
-
-    const cities = citiesByRegion.get(regionKey(drillDown.label)) ?? []
-    return sortBreakdownRows(
-      cities
-        .map((city) => ({
-          label: city,
-          count: countSuppliersInCity(accounts, city),
-        }))
-        .filter((r) => r.count > 0),
-    )
-  }, [drillDown, accounts, domainOptions, catalogCities, citiesByRegion])
-
-  const breakdownTotal = useMemo(
-    () => breakdownRows.reduce((sum, r) => sum + r.count, 0),
-    [breakdownRows],
+  const domainAutocompleteList = useMemo(
+    () => domainAutocompleteOptions(domainOptions),
+    [domainOptions],
+  )
+  const domainPickerSuggestions = useMemo(
+    () => buildDomainPickerSuggestions(domainOptions),
+    [domainOptions],
   )
 
-  const openCity = (city: string, e?: MouseEvent) => {
-    e?.stopPropagation()
-    setDrillDown({ kind: 'city', label: city })
-  }
+  const filterDomainAutocompleteOptions = useCallback(
+    (options: string[], state: FilterOptionsState<string>) => {
+      const q = state.inputValue.trim().toLowerCase()
+      if (!q) return domainPickerSuggestions
+      return options.filter((option) => option.toLowerCase().includes(q))
+    },
+    [domainPickerSuggestions],
+  )
 
-  const openRegion = (region: string, e?: MouseEvent) => {
-    e?.stopPropagation()
-    setDrillDown({ kind: 'region', label: region })
-  }
-
-  const openDomain = (domain: string) => {
-    setDrillDown({ kind: 'domain', label: domain })
-  }
-
-  const handleTabChange = (_e: unknown, v: CityTab) => {
-    setTab(v)
-    setDrillDown(null)
-  }
-
-  if (drillDown) {
-    const nameColumn =
-      drillDown.kind === 'city' ? 'תחום' : drillDown.kind === 'domain' ? 'עיר' : 'עיר'
-    const emptyMessage =
-      drillDown.kind === 'city'
-        ? 'אין ספקים בעיר זו'
-        : drillDown.kind === 'domain'
-          ? 'אין ספקים בתחום זה'
-          : 'אין ספקים באזור זה'
-
-    return (
-      <Card elevation={1} sx={{ borderRadius: 3, direction: 'rtl', textAlign: 'right' }}>
-        <CardContent sx={{ direction: 'rtl', textAlign: 'right' }}>
-          <Stack spacing={2} sx={{ direction: 'rtl', textAlign: 'right' }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', direction: 'rtl' }}>
-              <Button
-                startIcon={<ArrowBackIcon />}
-                onClick={() => setDrillDown(null)}
-                sx={{
-                  '& .MuiButton-startIcon': { marginInlineEnd: '8px', marginInlineStart: 0 },
-                }}
-              >
-                חזרה
-              </Button>
-              <Typography sx={{ fontWeight: 800, flex: 1 }}>{drillDownTitle(drillDown)}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {breakdownTotal} ספקים · {breakdownRows.length} שורות
-              </Typography>
-            </Stack>
-            <BreakdownTable rows={breakdownRows} nameColumn={nameColumn} emptyMessage={emptyMessage} />
-          </Stack>
-        </CardContent>
-      </Card>
+  const selectedDomainCityRows = useMemo((): BreakdownRow[] => {
+    if (!selectedDomain) return []
+    return sortBreakdownRows(
+      catalogCities.map((city) => ({
+        label: city,
+        count: countSuppliersInCityAndDomain(accounts, city, selectedDomain),
+      })),
     )
-  }
+  }, [selectedDomain, catalogCities, accounts])
+
+  const popupSuppliers = useMemo(() => {
+    if (!suppliersPopup) return []
+    return suppliersInCityAndDomain(accounts, suppliersPopup.city, suppliersPopup.domain).sort(
+      (a, b) => String(a.accountName || '').localeCompare(String(b.accountName || ''), 'he'),
+    )
+  }, [suppliersPopup, accounts])
+
+  const handleCountClick = useCallback(
+    (city: string, _count: number) => {
+      if (!selectedDomain) return
+      setSuppliersPopup({ domain: selectedDomain, city })
+    },
+    [selectedDomain],
+  )
 
   return (
     <Card elevation={1} sx={{ borderRadius: 3, direction: 'rtl', textAlign: 'right' }}>
       <CardContent sx={{ direction: 'rtl', textAlign: 'right' }}>
         <Stack spacing={2} sx={{ direction: 'rtl', textAlign: 'right' }}>
-          <Tabs
-            value={tab}
-            onChange={handleTabChange}
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab value="list" label="כל הערים" />
-            <Tab value="domains" label="כל התחומים" />
-          </Tabs>
-
-          {tab === 'domains' ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <TextField
-                size="small"
-                placeholder="חיפוש תחום…"
-                value={domainQuery}
-                onChange={(e) => setDomainQuery(e.target.value)}
-                sx={{ flex: 1 }}
-              />
-              <Button variant="outlined" onClick={() => void load()}>
-                רענון
-              </Button>
-            </Stack>
-          ) : (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <TextField
-                size="small"
-                placeholder="חיפוש עיר או אזור…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                sx={{ flex: 1 }}
-              />
-              <Button variant="outlined" onClick={() => void load()}>
-                רענון
-              </Button>
-            </Stack>
-          )}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+            <Autocomplete
+              options={domainAutocompleteList}
+              value={selectedDomain}
+              onChange={(_e, value) => {
+                setSelectedDomain(value)
+                setSuppliersPopup(null)
+              }}
+              openOnFocus
+              filterOptions={filterDomainAutocompleteOptions}
+              noOptionsText="אין תחומים"
+              sx={{ flex: 1, minWidth: 0, direction: 'rtl' }}
+              slotProps={{ paper: { sx: { direction: 'rtl' } } }}
+              renderInput={(params) => (
+                <TextField {...params} size="small" placeholder="בחר או חפש תחום…" />
+              )}
+            />
+            <Button variant="outlined" onClick={() => void load()} sx={{ flexShrink: 0 }}>
+              רענון
+            </Button>
+          </Stack>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
 
           {loading ? (
             <Box sx={{ py: 6, textAlign: 'center' }}>טוען…</Box>
-          ) : tab === 'list' ? (
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
-              <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>אזור</TableCell>
-                    <TableCell>עיר</TableCell>
-                    <TableCell>slug</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredList.map((row) => (
-                    <TableRow key={row.id} hover>
-                      <TableCell
-                        sx={highlightCellSx(regionsWithSuppliers.has(regionKey(row.region)))}
-                        onClick={(e) => openRegion(row.region, e)}
-                        title="הצג ערים ומספר ספקים באזור"
-                      >
-                        {row.region}
-                      </TableCell>
-                      <TableCell
-                        sx={highlightCellSx(citiesWithSuppliers.has(String(row.city || '').trim()))}
-                        onClick={(e) => openCity(row.city, e)}
-                        title="הצג תחומים ומספר ספקים בעיר"
-                      >
-                        {row.city}
-                      </TableCell>
-                      <TableCell>{row.slug || '—'}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredList.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} sx={{ py: 6, textAlign: 'right' }}>
-                        אין נתונים
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </TableContainer>
+          ) : selectedDomain ? (
+            <Box>
+              <Typography sx={{ fontWeight: 700, mb: 1 }}>
+                ערים בתחום: {selectedDomain}
+              </Typography>
+              <BreakdownTable
+                rows={selectedDomainCityRows}
+                nameColumn="עיר"
+                emptyMessage="אין ערים ברשימה"
+                highlightMinCount={SUPPLIER_ROW_HIGHLIGHT_MIN}
+                onCountClick={handleCountClick}
+              />
+            </Box>
           ) : (
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+            <Typography color="text.secondary" sx={{ py: 2, textAlign: 'right' }}>
+              בחר תחום מהרשימה כדי לראות כמה ספקים יש בכל עיר
+            </Typography>
+          )}
+        </Stack>
+      </CardContent>
+
+      <Dialog
+        open={!!suppliersPopup}
+        onClose={() => setSuppliersPopup(null)}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, direction: 'rtl' } } }}
+      >
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            fontWeight: 800,
+          }}
+        >
+          <Typography component="span" sx={{ fontWeight: 800, fontSize: 18 }}>
+            {suppliersPopup
+              ? `ספקים · ${suppliersPopup.domain} · ${suppliersPopup.city} (${popupSuppliers.length})`
+              : 'ספקים'}
+          </Typography>
+          <IconButton aria-label="סגירה" onClick={() => setSuppliersPopup(null)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          {popupSuppliers.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 4, px: 2, textAlign: 'right' }}>
+              אין ספקים להצגה
+            </Typography>
+          ) : (
+            <TableContainer sx={{ maxHeight: 'min(70vh, 520px)' }}>
               <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                 <TableHead>
                   <TableRow>
-                    <TableCell>תחום</TableCell>
+                    <TableCell>שם</TableCell>
+                    <TableCell>תחומים</TableCell>
+                    <TableCell>ערים</TableCell>
+                    <TableCell>קרדיטים</TableCell>
+                    <TableCell>סטטוס זמינות</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredDomains.map((domain) => (
-                    <TableRow key={domain} hover>
-                      <TableCell
-                        sx={highlightCellSx(domainsWithSuppliers.has(domain))}
-                        onClick={() => openDomain(domain)}
-                        title="הצג ערים ומספר ספקים בתחום"
-                      >
-                        {domain}
+                  {popupSuppliers.map((account) => (
+                    <TableRow key={account.id} hover>
+                      <TableCell>{account.accountName || '—'}</TableCell>
+                      <TableCell sx={{ maxWidth: 220 }} title={formatAccountDomainsDisplay(account)}>
+                        {formatAccountDomainsDisplay(account)}
                       </TableCell>
+                      <TableCell sx={{ maxWidth: 220 }} title={formatAccountCitiesDisplay(account)}>
+                        {formatAccountCitiesDisplay(account)}
+                      </TableCell>
+                      <TableCell>{account.credits ?? '—'}</TableCell>
+                      <TableCell>{formatAccountStatusAvailabilityDisplay(account)}</TableCell>
                     </TableRow>
                   ))}
-                  {filteredDomains.length === 0 ? (
-                    <TableRow>
-                      <TableCell sx={{ py: 6, textAlign: 'right' }}>
-                        אין נתונים
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
                 </TableBody>
               </Table>
             </TableContainer>
           )}
-        </Stack>
-      </CardContent>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

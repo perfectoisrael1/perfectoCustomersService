@@ -30,10 +30,14 @@ import SearchIcon from '@mui/icons-material/Search'
 import LeadEditDialog from '../components/LeadEditDialog'
 import {
   LEAD_PHONE_EMPHASIS,
+  LEAD_STATUS_VIEWS,
   LEAD_TYPE_OPTIONS,
   formatLeadPhoneDisplay,
   getLeadStatusColors,
   getLeadTypeColors,
+  isLeadStatusViewId,
+  leadMatchesStatusView,
+  type LeadStatusViewId,
 } from '../lib/leadsUi'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import CsTableContainer from '../components/CsStandardTable'
@@ -53,7 +57,8 @@ import {
   type LeadInput,
 } from '../api/csApi'
 
-type LeadTab = 'all' | 'today' | 'mine'
+type LeadBaseTab = 'all' | 'today' | 'mine'
+type LeadTab = LeadBaseTab | LeadStatusViewId
 
 type LeadsSortColumn =
   | 'name'
@@ -109,13 +114,13 @@ export default function LeadsPage() {
     const v = searchParams.get('view')
     if (v === 'all') return 'all'
     if (v === 'today') return 'today'
+    if (isLeadStatusViewId(v)) return v
     return 'mine'
   }, [searchParams])
 
   const setLeadTab = (next: LeadTab) => {
     if (next === 'mine') setSearchParams({}, { replace: true })
-    else if (next === 'today') setSearchParams({ view: 'today' }, { replace: true })
-    else setSearchParams({ view: 'all' }, { replace: true })
+    else setSearchParams({ view: next }, { replace: true })
   }
 
   const [allRows, setAllRows] = useState<Lead[]>([])
@@ -158,14 +163,24 @@ export default function LeadsPage() {
     }).format(new Date())
     const todayRows = allRows.filter((r) => String(r.created || '').startsWith(todayIso))
     const mineRows = user ? allRows.filter((r) => isMineRow(r, user)) : []
+    const statusViews = Object.fromEntries(
+      LEAD_STATUS_VIEWS.map((view) => [
+        view.id,
+        allRows.filter((r) => leadMatchesStatusView(r.status, view.id)).length,
+      ]),
+    ) as Record<LeadStatusViewId, number>
     return {
       mine: mineRows.length,
       today: todayRows.length,
       all: allRows.length,
+      statusViews,
     }
   }, [allRows, user])
 
   const tabRows = useMemo(() => {
+    if (isLeadStatusViewId(tab)) {
+      return allRows.filter((r) => leadMatchesStatusView(r.status, tab))
+    }
     if (tab === 'today') {
       const todayIso = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Jerusalem',
@@ -333,23 +348,54 @@ export default function LeadsPage() {
                     width: '100%',
                   }}
                 >
-                  <Tabs
-                    value={tab}
-                    onChange={(_e, v) => setLeadTab(v as LeadTab)}
-                    variant="scrollable"
-                    allowScrollButtonsMobile
+                  <Box
                     sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
                       flex: '1 1 auto',
                       minWidth: { xs: 'min(100%, 280px)', sm: 120 },
-                      borderBottom: 'none',
-                      minHeight: 48,
-                      '& .MuiTabs-indicator': { height: 3 },
+                      direction: 'rtl',
                     }}
                   >
-                    <Tab value="mine" label={`הלידים שלי (${counts.mine})`} />
-                    <Tab value="today" label={`לידים מהיום (${counts.today})`} />
-                    <Tab value="all" label={`כל הלידים (${counts.all})`} />
-                  </Tabs>
+                    <IconButton
+                      color="primary"
+                      onClick={openNew}
+                      aria-label="ליד חדש"
+                      sx={{
+                        flexShrink: 0,
+                        bgcolor: 'primary.main',
+                        color: '#fff',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                      }}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                    <Tabs
+                      value={tab}
+                      onChange={(_e, v) => setLeadTab(v as LeadTab)}
+                      variant="scrollable"
+                      allowScrollButtonsMobile
+                      sx={{
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        borderBottom: 'none',
+                        minHeight: 48,
+                        '& .MuiTabs-indicator': { height: 3 },
+                      }}
+                    >
+                      <Tab value="mine" label={`הלידים שלי (${counts.mine})`} />
+                      <Tab value="today" label={`לידים מהיום (${counts.today})`} />
+                      <Tab value="all" label={`כל הלידים (${counts.all})`} />
+                      {LEAD_STATUS_VIEWS.map((view) => (
+                        <Tab
+                          key={view.id}
+                          value={view.id}
+                          label={`${view.label} (${counts.statusViews[view.id]})`}
+                        />
+                      ))}
+                    </Tabs>
+                  </Box>
 
                   <Box
                     sx={{
@@ -360,9 +406,6 @@ export default function LeadsPage() {
                       flexWrap: 'nowrap',
                     }}
                   >
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={openNew} sx={{ whiteSpace: 'nowrap' }}>
-                      ליד חדש
-                    </Button>
                     <Button
                       variant="contained"
                       onClick={() => void loadAll()}

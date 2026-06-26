@@ -29,7 +29,7 @@ const mainLinks: NavLink[] = [
   { to: '/leads', prefix: '/leads', label: 'לידים' },
   { to: '/tickets', prefix: '/tickets', label: 'שירות ספקים' },
   { to: '/tasks/my-tasks', prefix: '/tasks', label: 'משימות' },
-  { to: '/cities', prefix: '/cities', label: 'אזורים וערים' },
+  { to: '/cities', prefix: '/cities', label: 'ספקים וערים' },
   { to: '/commissions', prefix: '/commissions', label: 'מחירון עמלות' },
   { to: '/company-employees', prefix: '/company-employees', label: 'עובדי חברה' },
   { to: '/domains', prefix: '/domains', label: 'דומיינים' },
