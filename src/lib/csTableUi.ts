@@ -142,6 +142,18 @@ export function csDataTableSx(theme: Theme) {
       zIndex: 14,
       backgroundColor: headerBg,
     },
+    '& tbody td:first-of-type:has(.MuiCheckbox-root)': {
+      borderRight: 'none',
+    },
+    '& tbody td:has(.MuiCheckbox-root), & thead .MuiTableCell-head:has(.MuiCheckbox-root)': {
+      textOverflow: 'clip !important',
+      whiteSpace: 'normal !important',
+      lineHeight: 0,
+      '& .MuiCheckbox-root': {
+        lineHeight: 1,
+        verticalAlign: 'middle',
+      },
+    },
     /** כותרות ממוינות: טקסט מימין, אייקון המיון משמאל לטקסט */
     '& thead .MuiTableSortLabel-root': {
       width: '100%',

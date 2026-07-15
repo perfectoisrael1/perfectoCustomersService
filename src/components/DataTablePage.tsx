@@ -16,6 +16,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  useCsTableSelection,
+} from './CsTableSelection'
+import { prependSelectedNotInList } from '../lib/csTableListHelpers'
 
 type Column<T> = {
   key: string
@@ -54,6 +61,7 @@ export default function DataTablePage<T extends object>({
   rowKey,
 }: Props<T>) {
   const [query, setQuery] = useState('')
+  const rowSelection = useCsTableSelection({ getRowId: (row) => rowKey(row as unknown as T) })
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -66,6 +74,12 @@ export default function DataTablePage<T extends object>({
       return values.some((value) => toSearchValue(value).toLowerCase().includes(q))
     })
   }, [query, rows, searchFields])
+
+  const displayRows = useMemo(
+    () =>
+      prependSelectedNotInList(filteredRows, rows, rowSelection.selectedIds, (row) => rowKey(row)),
+    [filteredRows, rows, rowSelection.selectedIds, rowKey],
+  )
 
   return (
     <Card elevation={1} sx={{ borderRadius: 3 }}>
@@ -112,12 +126,18 @@ export default function DataTablePage<T extends object>({
         ) : (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              מוצגות {filteredRows.length} רשומות
+              מוצגות {displayRows.length} רשומות
             </Typography>
             <TableContainer sx={{ maxHeight: 'calc(100vh - 260px)' }}>
-              <Table stickyHeader size="small">
+              <Table stickyHeader size="small" dir="rtl">
                 <TableHead>
                   <TableRow>
+                    <CsTableSelectAllHeaderCell
+                      pageRows={displayRows}
+                      getRowId={(row) => rowKey(row as T)}
+                      selectedIds={rowSelection.selectedIds}
+                      onTogglePage={() => rowSelection.toggleAllOnPage(displayRows)}
+                    />
                     {columns.map((column) => (
                       <TableCell
                         key={column.key}
@@ -129,16 +149,24 @@ export default function DataTablePage<T extends object>({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredRows.map((row) => (
-                    <TableRow key={rowKey(row)} hover>
-                      {columns.map((column) => (
-                        <TableCell key={column.key}>{toSearchValue(column.render(row))}</TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                  {filteredRows.length === 0 ? (
+                  {displayRows.map((row) => {
+                    const id = rowKey(row)
+                    return (
+                      <TableRow key={id} hover>
+                        <CsTableRowCheckboxCell
+                          rowId={id}
+                          selected={rowSelection.isSelected(id)}
+                          onToggle={rowSelection.toggleRow}
+                        />
+                        {columns.map((column) => (
+                          <TableCell key={column.key}>{toSearchValue(column.render(row))}</TableCell>
+                        ))}
+                      </TableRow>
+                    )
+                  })}
+                  {displayRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={columns.length} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={columns.length + 1} align="center" sx={{ py: 6 }}>
                         אין נתונים להצגה
                       </TableCell>
                     </TableRow>
@@ -149,6 +177,12 @@ export default function DataTablePage<T extends object>({
           </>
         )}
       </CardContent>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      />
     </Card>
   )
 }

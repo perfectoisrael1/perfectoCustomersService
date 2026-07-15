@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -48,6 +47,14 @@ import {
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -225,6 +232,7 @@ export default function TasksPage() {
   const [criteriaAnchor, setCriteriaAnchor] = useState<HTMLElement | null>(null)
   const [statusSavingId, setStatusSavingId] = useState<number | null>(null)
   const [prioritySavingId, setPrioritySavingId] = useState<number | null>(null)
+  const [projectSavingId, setProjectSavingId] = useState<number | null>(null)
   const [pendingAttachFiles, setPendingAttachFiles] = useState<File[]>([])
   const [attachDragging, setAttachDragging] = useState(false)
   const [attachUploading, setAttachUploading] = useState(false)
@@ -236,6 +244,7 @@ export default function TasksPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   useEffect(() => {
     if (tabSlug === 'icarus') {
@@ -324,10 +333,16 @@ export default function TasksPage() {
     return list
   }, [filteredRows, sort])
 
+  const displayRows = useMemo(
+    () =>
+      prependSelectedNotInList(sortedRows, rows, rowSelection.selectedIds, (r) => r.id, 'append'),
+    [sortedRows, rows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: TasksSortColumn) => {
     setSort((prev) =>
@@ -364,7 +379,7 @@ export default function TasksPage() {
       responsible: user?.fullName || user?.username || '',
       status: 'חדשה',
       priority: 'לא דחוף',
-      project_name: 'פרפקטו',
+      project_name: null,
       sprint_number: '',
       execution_date: null,
       file_urls: null,
@@ -508,8 +523,23 @@ export default function TasksPage() {
     }
   }
 
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteTask)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת משימות')
+      throw err
+    }
+  }, [load, rowSelection])
+
   const taskStatusOptionSet = useMemo(() => new Set<string>(TASK_STATUS_OPTIONS), [])
   const taskPriorityOptionSet = useMemo(() => new Set<string>(TASK_PRIORITY_OPTIONS), [])
+  const taskProjectOptionSet = useMemo(() => new Set<string>(TASK_PROJECT_OPTIONS), [])
 
   const handleInlinePriorityChange = async (row: Task, newPriority: string) => {
     if (!row?.id || newPriority === (row.priority?.trim() || 'לא דחוף')) return
@@ -547,7 +577,24 @@ export default function TasksPage() {
     }
   }
 
-  const colSpan = 9
+  const handleInlineProjectChange = async (row: Task, newProject: string) => {
+    const nextProject: string | null = newProject === '' ? null : newProject
+    if (!row?.id || nextProject === row.project_name) return
+    setProjectSavingId(row.id)
+    setError(null)
+    try {
+      const payload: TaskInput = { project_name: nextProject }
+      await putTask(row.id, payload)
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, ...payload } : r)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בעדכון פרויקט')
+      await load()
+    } finally {
+      setProjectSavingId(null)
+    }
+  }
+
+  const colSpan = 10
 
   return (
     <>
@@ -735,6 +782,11 @@ export default function TasksPage() {
                     <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                       <TableHead>
                         <TableRow>
+                          <CsTableSelectAllHeaderCell
+                            pageRows={pageRows}
+                            selectedIds={rowSelection.selectedIds}
+                            onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                          />
                           <TableCell sortDirection={sort.col === 'task_name' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'task_name'}
@@ -827,6 +879,11 @@ export default function TasksPage() {
                           const priorityCellColors = taskPriorityCellColors(priorityDisplay)
                           return (
                             <TableRow key={row.id} hover sx={{ cursor: 'pointer' }} onClick={() => openEdit(row)}>
+                              <CsTableRowCheckboxCell
+                                rowId={row.id}
+                                selected={rowSelection.isSelected(row.id)}
+                                onToggle={rowSelection.toggleRow}
+                              />
                               <TableCell title={row.task_name}>{row.task_name}</TableCell>
                               <TableCell
                                 sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -1065,12 +1122,134 @@ export default function TasksPage() {
                                   })}
                                 </Select>
                               </TableCell>
-                              <TableCell sx={{ overflow: 'visible', textOverflow: 'clip' }}>
-                                <Chip
+                              <TableCell
+                                align="center"
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                sx={{
+                                  backgroundColor: `${pc.bg} !important`,
+                                  color: `${pc.fg} !important`,
+                                  textAlign: 'center !important',
+                                  py: 0.5,
+                                  px: 0.5,
+                                  verticalAlign: 'middle',
+                                  overflow: 'hidden',
+                                  '& > *': { backgroundColor: 'transparent !important' },
+                                }}
+                              >
+                                <Select
                                   size="small"
-                                  label={row.project_name || '—'}
-                                  sx={{ bgcolor: pc.bg, color: pc.fg, fontWeight: 700 }}
-                                />
+                                  value={String(row.project_name || '')}
+                                  disabled={projectSavingId === row.id}
+                                  onChange={(e) => void handleInlineProjectChange(row, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  variant="standard"
+                                  disableUnderline
+                                  displayEmpty
+                                  renderValue={(selected) => {
+                                    if (projectSavingId === row.id) {
+                                      return <CircularProgress size={18} sx={{ color: 'inherit' }} />
+                                    }
+                                    return selected || '—'
+                                  }}
+                                  sx={{
+                                    color: 'inherit',
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    width: '100%',
+                                    '& .MuiSelect-select': { py: 0, textAlign: 'center', pr: '0 !important', pl: '0 !important' },
+                                    '& .MuiSelect-icon': { display: 'none' },
+                                  }}
+                                  MenuProps={{
+                                    slotProps: {
+                                      paper: {
+                                        sx: {
+                                          borderRadius: 2.5,
+                                          p: 1,
+                                          overflow: 'hidden',
+                                          '& .MuiList-root': {
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(3, minmax(110px, 1fr))',
+                                            gap: 1,
+                                            p: 0.5,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  }}
+                                >
+                                  <MenuItem
+                                    value=""
+                                    sx={{
+                                      gridColumn: '1 / -1',
+                                      fontWeight: 700,
+                                      borderRadius: 1.5,
+                                      minHeight: 44,
+                                      justifyContent: 'center',
+                                      textAlign: 'center',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    —
+                                  </MenuItem>
+                                  {row.project_name
+                                  && !taskProjectOptionSet.has(row.project_name) ? (
+                                    <MenuItem
+                                      key={row.project_name}
+                                      value={row.project_name}
+                                      sx={{
+                                        backgroundColor: taskProjectChipColors(row.project_name).bg,
+                                        color: taskProjectChipColors(row.project_name).fg,
+                                        fontWeight: 700,
+                                        borderRadius: 1.5,
+                                        minHeight: 44,
+                                        justifyContent: 'center',
+                                        textAlign: 'center',
+                                        whiteSpace: 'nowrap',
+                                        px: 1,
+                                        '&:hover': {
+                                          backgroundColor: taskProjectChipColors(row.project_name).bg,
+                                          opacity: 0.9,
+                                        },
+                                        '&.Mui-selected': {
+                                          backgroundColor: taskProjectChipColors(row.project_name).bg,
+                                        },
+                                        '&.Mui-selected:hover': {
+                                          backgroundColor: taskProjectChipColors(row.project_name).bg,
+                                          opacity: 0.9,
+                                        },
+                                      }}
+                                    >
+                                      {row.project_name}
+                                    </MenuItem>
+                                  ) : null}
+                                  {TASK_PROJECT_OPTIONS.map((opt) => {
+                                    const pcOpt = taskProjectChipColors(opt)
+                                    return (
+                                      <MenuItem
+                                        key={opt}
+                                        value={opt}
+                                        sx={{
+                                          backgroundColor: pcOpt.bg,
+                                          color: pcOpt.fg,
+                                          fontWeight: 700,
+                                          borderRadius: 1.5,
+                                          minHeight: 44,
+                                          justifyContent: 'center',
+                                          textAlign: 'center',
+                                          whiteSpace: 'nowrap',
+                                          px: 1,
+                                          '&:hover': { backgroundColor: pcOpt.bg, opacity: 0.9 },
+                                          '&.Mui-selected': { backgroundColor: pcOpt.bg },
+                                          '&.Mui-selected:hover': { backgroundColor: pcOpt.bg, opacity: 0.9 },
+                                        }}
+                                      >
+                                        {opt}
+                                      </MenuItem>
+                                    )
+                                  })}
+                                </Select>
                               </TableCell>
                               <TableCell>{row.sprint_number || '—'}</TableCell>
                               <TableCell align="center">
@@ -1082,7 +1261,7 @@ export default function TasksPage() {
                             </TableRow>
                           )
                         })}
-                        {sortedRows.length === 0 ? (
+                        {displayRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                               אין נתונים להצגה
@@ -1094,7 +1273,7 @@ export default function TasksPage() {
                     </CsTableContainer>
                   <CsTablePaginationFooter
                     rowsPerPageOptions={[10, 25, 50, 100]}
-                    count={sortedRows.length}
+                    count={displayRows.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_e, next) => setPage(next)}
@@ -1203,14 +1382,21 @@ export default function TasksPage() {
           <TextField
             select
             label="פרויקט"
-            value={form.project_name || 'פרפקטו'}
-            onChange={(e) => setForm((f) => ({ ...f, project_name: e.target.value }))}
+            value={form.project_name ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, project_name: e.target.value || null }))}
             fullWidth
             sx={TASK_EDITOR_RTL_FIELD_SX}
-            slotProps={{ select: { MenuProps: TASK_EDITOR_SELECT_MENU_PROPS } }}
+            slotProps={{
+              select: {
+                displayEmpty: true,
+                renderValue: (v) => (v ? String(v) : '—'),
+                MenuProps: TASK_EDITOR_SELECT_MENU_PROPS,
+              },
+            }}
           >
+            <MenuItem value="">—</MenuItem>
             {(() => {
-              const pv = form.project_name || 'פרפקטו'
+              const pv = form.project_name
               const base: string[] = [...TASK_PROJECT_OPTIONS]
               if (pv && !base.includes(pv)) base.unshift(pv)
               return base.map((p) => (
@@ -1218,13 +1404,6 @@ export default function TasksPage() {
               ))
             })()}
           </TextField>
-          <TextField
-            label="ספרינט"
-            value={form.sprint_number || ''}
-            onChange={(e) => setForm((f) => ({ ...f, sprint_number: e.target.value || null }))}
-            fullWidth
-            sx={TASK_EDITOR_RTL_FIELD_SX}
-          />
           <TextField
             label="תאריך ביצוע"
             type="date"
@@ -1541,6 +1720,18 @@ export default function TasksPage() {
           </Stack>
         </DialogActions>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="משימות"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

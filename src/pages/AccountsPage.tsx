@@ -46,6 +46,14 @@ import {
 import AccountEditDialog from '../components/AccountEditDialog'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -116,6 +124,7 @@ export default function AccountsPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -194,10 +203,15 @@ export default function AccountsPage() {
     return list
   }, [filtered, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, rows, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, rows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: AccountsSortColumn) => {
     setSort((prev) =>
@@ -304,7 +318,21 @@ export default function AccountsPage() {
     }
   }
 
-  const colSpan = 7
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteAccount)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת ספקים')
+      throw err
+    }
+  }, [load, rowSelection])
+
+  const colSpan = 8
 
   return (
     <>
@@ -492,6 +520,11 @@ export default function AccountsPage() {
                     <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                       <TableHead>
                         <TableRow>
+                          <CsTableSelectAllHeaderCell
+                            pageRows={pageRows}
+                            selectedIds={rowSelection.selectedIds}
+                            onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                          />
                           <TableCell sortDirection={sort.col === 'accountName' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'accountName'}
@@ -561,6 +594,11 @@ export default function AccountsPage() {
                               sx={{ cursor: 'pointer' }}
                               onClick={() => openEdit(row)}
                             >
+                              <CsTableRowCheckboxCell
+                                rowId={row.id}
+                                selected={rowSelection.isSelected(row.id)}
+                                onToggle={rowSelection.toggleRow}
+                              />
                               <TableCell title={row.accountName}>{row.accountName}</TableCell>
                               <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
                               <TableCell title={String(row.password || '')}>
@@ -585,7 +623,8 @@ export default function AccountsPage() {
                             </TableRow>
                           )
                         })}
-                        {sortedRows.length === 0 ? (
+                       
+                        {displayRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                               אין נתונים להצגה
@@ -597,7 +636,7 @@ export default function AccountsPage() {
                     </CsTableContainer>
                   <CsTablePaginationFooter
                     rowsPerPageOptions={[10, 25, 50, 100]}
-                    count={sortedRows.length}
+                    count={displayRows.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_e, next) => setPage(next)}
@@ -630,6 +669,18 @@ export default function AccountsPage() {
         onSave={() => void handleSave()}
         onDelete={() => void handleDelete()}
       />
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="ספקים"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

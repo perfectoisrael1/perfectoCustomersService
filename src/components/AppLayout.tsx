@@ -33,6 +33,7 @@ const mainLinks: NavLink[] = [
   { to: '/commissions', prefix: '/commissions', label: 'מחירון עמלות' },
   { to: '/company-employees', prefix: '/company-employees', label: 'עובדי חברה' },
   { to: '/domains', prefix: '/domains', label: 'דומיינים' },
+  { to: '/notifications', prefix: '/notifications', label: 'התראות' },
 ]
 
 const bottomLinks: NavLink[] = [
@@ -45,6 +46,7 @@ const MANAGER_ONLY_PREFIXES = new Set([
   '/company-employees',
   '/domains',
   '/dashboards',
+  '/notifications',
 ])
 
 function filterNavLinks(links: NavLink[], isManager: boolean): NavLink[] {

@@ -265,11 +265,13 @@ export function taskPriorityCellColors(priority: string | null | undefined): { b
 }
 
 export const TASK_PROJECT_OPTIONS = [
-  'פרפקטו',
+  'אפליקציה',
+  'אתר פרפקטו',
+  'אתרים כלליים',
+  'בוט ווצאפ',
+  'בוט טלפון',
   'מייק',
-  'אתר',
-  'מאני צאט',
-  'שיפורים',
+  'פאנל ניהול',
 ] as const
 
 /** צבעי תא פרויקט — מיושר עם קליבר + שמות ישנים */
@@ -277,6 +279,20 @@ export function taskProjectChipColors(project: string | null | undefined): { bg:
   const raw = String(project || '').trim()
   const p = raw === 'סוניה' ? 'שיפורים' : raw === 'מאניצאט' ? 'מאני צאט' : raw
   switch (p) {
+    case 'אפליקציה':
+      return { bg: '#E8F5E9', fg: '#1B5E20' }
+    case 'אתר פרפקטו':
+      return { bg: '#FFF8E1', fg: '#FF6F00' }
+    case 'אתרים כלליים':
+      return { bg: '#ECEFF1', fg: '#37474F' }
+    case 'בוט ווצאפ':
+      return { bg: '#E8EAF6', fg: '#283593' }
+    case 'בוט טלפון':
+      return { bg: '#E0F2F1', fg: '#004D40' }
+    case 'מייק':
+      return { bg: '#FCE4EC', fg: '#880E4F' }
+    case 'פאנל ניהול':
+      return { bg: '#EDE7F6', fg: '#4527A0' }
     case 'קליבר ספקים':
       return { bg: '#E0F7FA', fg: '#006064' }
     case 'קליבר לקוחות':
@@ -285,8 +301,6 @@ export function taskProjectChipColors(project: string | null | undefined): { bg:
       return { bg: '#F3E5F5', fg: '#4A148C' }
     case 'אתר':
       return { bg: '#FFF8E1', fg: '#FF6F00' }
-    case 'מייק':
-      return { bg: '#FCE4EC', fg: '#880E4F' }
     case 'פרפקטו':
       return { bg: '#E8F5E9', fg: '#1B5E20' }
     case 'מאני צאט':

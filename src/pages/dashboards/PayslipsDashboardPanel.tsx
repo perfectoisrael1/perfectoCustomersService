@@ -32,6 +32,13 @@ import {
 } from '../../api/csApi'
 import { useAuth } from '../../context/useAuth'
 import { csDataTableSx } from '../../lib/csTableUi'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  useCsTableSelection,
+} from '../../components/CsTableSelection'
+import { prependSelectedNotInList } from '../../lib/csTableListHelpers'
 import { GAP_BELOW_INNER_NAV_PX } from '../../layout/headerLayout'
 import {
   buildPayslipUploadMonthOptions,
@@ -106,6 +113,18 @@ export default function PayslipsDashboardPanel() {
       return urls.some((url) => typeof url === 'string' && url.includes(payslipUploadMonthYear))
     })
   }, [usersForSelect, payslipUploadMonthYear])
+
+  const rowSelection = useCsTableSelection()
+  const displayPayslipUsers = useMemo(
+    () =>
+      prependSelectedNotInList(
+        usersWithPayslipForMonth,
+        usersWithPayslipForMonth,
+        rowSelection.selectedIds,
+        (u) => u.id,
+      ),
+    [usersWithPayslipForMonth, rowSelection.selectedIds],
+  )
 
   const clearSelectedFile = () => {
     setSelectedFile(null)
@@ -351,6 +370,11 @@ export default function PayslipsDashboardPanel() {
               <Table size="small" stickyHeader dir="rtl" sx={csDataTableSx(theme)}>
                 <TableHead>
                   <TableRow>
+                    <CsTableSelectAllHeaderCell
+                      pageRows={displayPayslipUsers}
+                      selectedIds={rowSelection.selectedIds}
+                      onTogglePage={() => rowSelection.toggleAllOnPage(displayPayslipUsers)}
+                    />
                     <TableCell sx={{ fontWeight: 800 }} align="right">
                       שם
                     </TableCell>
@@ -363,19 +387,24 @@ export default function PayslipsDashboardPanel() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {usersWithPayslipForMonth.length === 0 ? (
+                  {displayPayslipUsers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+                      <TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 4 }}>
                         אין תלושים לחודש זה
                       </TableCell>
                     </TableRow>
                   ) : (
-                    usersWithPayslipForMonth.map((u) => {
+                    displayPayslipUsers.map((u) => {
                       const matchingUrl = (u.payslipsUrls || []).find(
                         (url) => typeof url === 'string' && url.includes(payslipUploadMonthYear),
                       )
                       return (
                         <TableRow key={u.id} hover>
+                          <CsTableRowCheckboxCell
+                            rowId={u.id}
+                            selected={rowSelection.isSelected(u.id)}
+                            onToggle={rowSelection.toggleRow}
+                          />
                           <TableCell align="right">{u.fullName || u.username || '—'}</TableCell>
                           <TableCell align="center">{payslipUploadMonthYear}</TableCell>
                           <TableCell align="center">
@@ -440,6 +469,12 @@ export default function PayslipsDashboardPanel() {
           מחיקה
         </MenuItem>
       </Menu>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      />
     </Box>
   )
 }

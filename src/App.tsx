@@ -20,6 +20,7 @@ const CommissionsPage = lazy(() => import('./pages/CommissionsPage'))
 const CompanyEmployeesPage = lazy(() => import('./pages/CompanyEmployeesPage'))
 const DashboardsPage = lazy(() => import('./pages/DashboardsPage'))
 const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 
 function PageLoadFallback() {
   return (
@@ -123,6 +124,14 @@ export default function App() {
                   element={(
                     <ManagerProtectedRoute>
                       <DomainsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
+                <Route
+                  path="/notifications"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <NotificationsPage />
                     </ManagerProtectedRoute>
                   )}
                 />

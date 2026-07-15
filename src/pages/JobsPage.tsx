@@ -51,6 +51,14 @@ import {
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -58,27 +66,62 @@ import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
 } from '../layout/headerLayout'
 
-type JobsTab = 'today' | 'exceptions' | 'search' | 'leave'
+type JobsTab = 'today' | 'exceptions' | 'unassigned' | 'search' | 'leave'
 
 /** עמודות מיון לטבלת פניות (תואם עמודות תצוגה) */
 type JobsSortColumn =
+  | 'id'
   | 'customerDisplay'
   | 'phoneNumber'
   | 'description'
   | 'accountName'
   | 'specialtiesCategory'
+  | 'city'
   | 'statusLabel'
   | 'exclusionReason'
   | 'created'
 
+function isUnassignedJob(row: Job): boolean {
+  return row.accountId == null
+}
+
+function jobCustomerDisplay(row: Job): string {
+  return String(row.businessName || row.accountName || row.customerName || '').trim()
+}
+
+function jobProDisplay(row: Job): string {
+  if (isUnassignedJob(row)) return 'לא משויך'
+  return String(row.accountName || '').trim()
+}
+
+function jobDomainDisplay(row: Job): string {
+  return String(row.leadDomain || row.specialtiesCategory || '').trim()
+}
+
+function jobCityDisplay(row: Job): string {
+  return String(row.city || '').trim()
+}
+
 function jobSortValue(row: Job, col: JobsSortColumn): string {
+  if (col === 'id') {
+    return String(row.id ?? '')
+  }
   if (col === 'customerDisplay') {
-    return String(row.businessName || row.accountName || '').trim()
+    return jobCustomerDisplay(row)
+  }
+  if (col === 'accountName') {
+    return jobProDisplay(row)
+  }
+  if (col === 'specialtiesCategory') {
+    return jobDomainDisplay(row)
+  }
+  if (col === 'city') {
+    return jobCityDisplay(row)
   }
   return String(row[col] ?? '').trim()
 }
 
-const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'search', 'leave']
+const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'unassigned', 'search', 'leave']
 
 function segmentToTab(segment: string | undefined): JobsTab {
   const s = String(segment || '').trim()
@@ -111,8 +154,27 @@ function parseDomainCityFromDescription(description: string | undefined | null):
 }
 
 function showBroadcastToAccountsButton(job: Job, tab: JobsTab): boolean {
+  if (tab === 'unassigned') {
+    return Boolean(
+      String(job.leadDomain || '').trim() ||
+        parseDomainCityFromDescription(job.description),
+    )
+  }
   if (tab !== 'today' && tab !== 'search') return false
   return !String(job.leadDomain || '').trim()
+}
+
+function formatBroadcastSuccessMessage(res: {
+  matchedAccounts: number
+  createdJobs: number
+}): string {
+  if (res.createdJobs <= 0) {
+    return 'לא נוצרו פניות.'
+  }
+  if (res.matchedAccounts <= 0) {
+    return 'נוצרה פנייה ללא ספק (אין התאמות). ניתן לראות אותה בטאב «פניות ללא ספקים».'
+  }
+  return `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
 }
 
 const filterAutocompleteOptions = createFilterOptions<string>({
@@ -121,8 +183,8 @@ const filterAutocompleteOptions = createFilterOptions<string>({
   stringify: (option) => option,
 })
 
-/** מספר עמודות בטבלת פניות (כולל «פעולה») — ל־colSpan בשורת «אין נתונים» */
-const JOBS_TABLE_COL_SPAN = 10
+/** מספר עמודות בטבלת פניות (כולל צ'קבוקס + «פעולה») — ל־colSpan בשורת «אין נתונים» */
+const JOBS_TABLE_COL_SPAN = 13
 
 function buildDomainOptions(services: Service[]): string[] {
   const set = new Set<string>()
@@ -144,6 +206,43 @@ function buildCityOptions(cities: City[]): string[] {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
 }
 
+function catalogLookupKey(value: string): string {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function buildCatalogLookupSet(options: string[]): Set<string> {
+  return new Set(options.map(catalogLookupKey).filter(Boolean))
+}
+
+/** בטאב ללא ספקים: תחום/עיר שלא קיימים בקטלוג — הדגשת השורה */
+function isUnassignedCatalogMismatch(
+  row: Job,
+  domainSet: Set<string>,
+  citySet: Set<string>,
+): boolean {
+  // בלי קטלוג טעון — לא מסמנים (נמנעים מסימון שווא)
+  if (domainSet.size === 0 && citySet.size === 0) return false
+  const domain = jobDomainDisplay(row)
+  const city = jobCityDisplay(row)
+  const domainKnown = Boolean(domain) && domainSet.has(catalogLookupKey(domain))
+  const cityKnown = Boolean(city) && citySet.has(catalogLookupKey(city))
+  return !domainKnown || !cityKnown
+}
+
+/** אדום בהיר — חייב !important מול `& tbody tr { background }` ב־csDataTableSx */
+const UNASSIGNED_CATALOG_MISMATCH_ROW_SX = {
+  bgcolor: 'rgba(244, 67, 54, 0.14) !important',
+  '&:hover': {
+    bgcolor: 'rgba(244, 67, 54, 0.22) !important',
+  },
+  '&.Mui-selected, &.Mui-selected:hover': {
+    bgcolor: 'rgba(244, 67, 54, 0.22) !important',
+  },
+} as const
+
 const autocompleteTextFieldSx = {
   '& .MuiInputBase-input': { textAlign: 'right', direction: 'rtl' as const },
 }
@@ -157,6 +256,7 @@ function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
       return status !== 'לא נספר' && isPendingExclusion(r.exclusionReason)
     })
   }
+  if (tab === 'unassigned') return all.filter(isUnassignedJob)
   return all
 }
 
@@ -188,6 +288,7 @@ export default function JobsPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const [leaveDomain, setLeaveDomain] = useState('')
   const [leaveCity, setLeaveCity] = useState('')
@@ -233,6 +334,14 @@ export default function JobsPage() {
   const cityOptions = useMemo(
     () => buildCityOptions(catalogCities),
     [catalogCities],
+  )
+  const domainCatalogSet = useMemo(
+    () => buildCatalogLookupSet(domainOptions),
+    [domainOptions],
+  )
+  const cityCatalogSet = useMemo(
+    () => buildCatalogLookupSet(cityOptions),
+    [cityOptions],
   )
 
   useEffect(() => {
@@ -293,8 +402,11 @@ export default function JobsPage() {
 
   const openBroadcastDialog = useCallback((job: Job) => {
     const parsed = parseDomainCityFromDescription(job.description)
-    const domain = parsed?.domain || String(job.specialtiesCategory || '').trim()
-    const city = parsed?.city || ''
+    const domain =
+      String(job.leadDomain || '').trim() ||
+      parsed?.domain ||
+      String(job.specialtiesCategory || '').trim()
+    const city = String(job.city || '').trim() || parsed?.city || ''
     setBroadcastDraft({ job, domain, city })
   }, [])
 
@@ -312,14 +424,12 @@ export default function JobsPage() {
         domain: d,
         city: c,
         description: String(job.description || '').trim() || undefined,
+        phone: String(job.customerPhone || job.phoneNumber || '').trim() || undefined,
+        customerName: String(job.customerName || '').trim() || undefined,
       })
       setBroadcastDraft(null)
       await load({ silent: true })
-      setSuccessMessage(
-        res.createdJobs > 0
-          ? `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
-          : 'לא נמצאו בעלי מקצוע תואמים לתחום ולעיר.',
-      )
+      setSuccessMessage(formatBroadcastSuccessMessage(res))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בשליחת הפניות')
     } finally {
@@ -342,11 +452,7 @@ export default function JobsPage() {
         phone: leavePhone.trim() || undefined,
         customerName: leaveCustomerName.trim() || undefined,
       })
-      setSuccessMessage(
-        res.createdJobs > 0
-          ? `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
-          : 'לא נמצאו בעלי מקצוע תואמים לתחום ולעיר.',
-      )
+      setSuccessMessage(formatBroadcastSuccessMessage(res))
       void load({ silent: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה ביצירת הפניות')
@@ -378,18 +484,23 @@ export default function JobsPage() {
     if (!q) return tabRows
     return tabRows.filter((r) => {
       const blob = [
+        r.id,
         r.accountName,
+        r.customerName,
+        r.customerPhone,
         r.phoneNumber,
         r.businessName,
         r.description,
         r.statusLabel,
         r.specialtiesCategory,
+        r.leadDomain,
+        r.city,
         r.exclusionReason,
       ]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
       const digits = q.replace(/\D/g, '')
-      const phone = String(r.phoneNumber || '').replace(/\D/g, '')
+      const phone = String(r.phoneNumber || r.customerPhone || '').replace(/\D/g, '')
       return blob.includes(q) || (digits.length > 0 && phone.includes(digits))
     })
   }, [query, tabRows])
@@ -410,16 +521,21 @@ export default function JobsPage() {
     return rows
   }, [filtered, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, allJobs, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, allJobs, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: JobsSortColumn) => {
     setSort((prev) =>
       prev.col === col
         ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: col === 'created' ? 'desc' : 'asc' },
+        : { col, dir: col === 'created' || col === 'id' ? 'desc' : 'asc' },
     )
   }, [])
 
@@ -427,6 +543,7 @@ export default function JobsPage() {
     return {
       today: filterJobsForTab(allJobs, 'today').length,
       exceptions: filterJobsForTab(allJobs, 'exceptions').length,
+      unassigned: filterJobsForTab(allJobs, 'unassigned').length,
       search: allJobs.length,
     }
   }, [allJobs])
@@ -446,6 +563,20 @@ export default function JobsPage() {
       setDetailDeleting(false)
     }
   }
+
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteJob)
+      setDetail((d) => (d && ids.has(d.id) ? null : d))
+      rowSelection.clearSelection()
+      await load({ silent: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת פניות')
+      throw err
+    }
+  }, [load, rowSelection])
 
   return (
     <>
@@ -505,6 +636,7 @@ export default function JobsPage() {
                 >
                   <Tab value="today" label={`פניות היום (${counts.today})`} />
                   <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
+                  <Tab value="unassigned" label={`פניות ללא ספקים (${counts.unassigned})`} />
                   <Tab value="search" label={`כל הפניות (${counts.search})`} />
                   <Tab value="leave" label="השארת פנייה" />
                 </Tabs>
@@ -715,6 +847,20 @@ export default function JobsPage() {
                   <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                     <TableHead>
                       <TableRow>
+                        <CsTableSelectAllHeaderCell
+                          pageRows={pageRows}
+                          selectedIds={rowSelection.selectedIds}
+                          onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                        />
+                        <TableCell sortDirection={sort.col === 'id' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'id'}
+                            direction={sort.col === 'id' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('id')}
+                          >
+                            מספר הפניה
+                          </TableSortLabel>
+                        </TableCell>
                         <TableCell sortDirection={sort.col === 'customerDisplay' ? sort.dir : false}>
                           <TableSortLabel
                             active={sort.col === 'customerDisplay'}
@@ -760,6 +906,15 @@ export default function JobsPage() {
                             תחום
                           </TableSortLabel>
                         </TableCell>
+                        <TableCell sortDirection={sort.col === 'city' ? sort.dir : false}>
+                          <TableSortLabel
+                            active={sort.col === 'city'}
+                            direction={sort.col === 'city' ? sort.dir : 'asc'}
+                            onClick={() => onSortColumn('city')}
+                          >
+                            עיר
+                          </TableSortLabel>
+                        </TableCell>
                         <TableCell sortDirection={sort.col === 'statusLabel' ? sort.dir : false}>
                           <TableSortLabel
                             active={sort.col === 'statusLabel'}
@@ -793,22 +948,47 @@ export default function JobsPage() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {pageRows.map((row) => (
+                      {pageRows.map((row) => {
+                        const highlightUnassignedMismatch =
+                          tab === 'unassigned' &&
+                          !catalogLoading &&
+                          isUnassignedCatalogMismatch(row, domainCatalogSet, cityCatalogSet)
+                        return (
                         <TableRow
                           key={row.id}
                           hover
-                          sx={{ cursor: 'pointer' }}
+                          sx={{
+                            cursor: 'pointer',
+                            ...(highlightUnassignedMismatch
+                              ? UNASSIGNED_CATALOG_MISMATCH_ROW_SX
+                              : null),
+                          }}
                           onClick={() => setDetail(row)}
                         >
-                          <TableCell title={row.businessName || row.accountName}>
-                            {row.businessName || row.accountName}
+                          <CsTableRowCheckboxCell
+                            rowId={row.id}
+                            selected={rowSelection.isSelected(row.id)}
+                            onToggle={rowSelection.toggleRow}
+                          />
+                          <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>{row.id}</TableCell>
+                          <TableCell title={jobCustomerDisplay(row)}>
+                            {jobCustomerDisplay(row) || '—'}
                           </TableCell>
-                          <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
+                          <TableCell>
+                            {formatCsPhoneDisplay(
+                              row.customerPhone || row.phoneNumber,
+                            )}
+                          </TableCell>
                           <TableCell sx={{ maxWidth: 260 }} title={row.description}>
                             {row.description}
                           </TableCell>
-                          <TableCell title={row.accountName}>{row.accountName}</TableCell>
-                          <TableCell>{row.specialtiesCategory}</TableCell>
+                          <TableCell title={jobProDisplay(row)}>
+                            {jobProDisplay(row) || '—'}
+                          </TableCell>
+                          <TableCell>
+                            {jobDomainDisplay(row) || '—'}
+                          </TableCell>
+                          <TableCell>{jobCityDisplay(row) || '—'}</TableCell>
                           <TableCell sx={{ overflow: 'visible', textOverflow: 'clip' }}>
                             <Chip
                               size="small"
@@ -863,9 +1043,12 @@ export default function JobsPage() {
                                 size="small"
                                 variant="outlined"
                                 disabled={broadcastingId === row.id}
-                                onClick={() => openBroadcastDialog(row)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openBroadcastDialog(row)
+                                }}
                               >
-                                יצירת פניות
+                                {tab === 'unassigned' ? 'שידור לרלוונטים' : 'יצירת פניות'}
                               </Button>
                             ) : (
                               <Typography variant="caption" color="text.disabled">
@@ -874,8 +1057,9 @@ export default function JobsPage() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))}
-                      {sortedRows.length === 0 ? (
+                        )
+                      })}
+                      {displayRows.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={JOBS_TABLE_COL_SPAN} align="center" sx={{ py: 6 }}>
                             אין נתונים להצגה
@@ -887,7 +1071,7 @@ export default function JobsPage() {
                   </CsTableContainer>
                 <CsTablePaginationFooter
                   rowsPerPageOptions={[10, 25, 50, 100]}
-                  count={sortedRows.length}
+                  count={displayRows.length}
                   rowsPerPage={rowsPerPage}
                   page={page}
                   onPageChange={(_e, next) => setPage(next)}
@@ -919,10 +1103,27 @@ export default function JobsPage() {
         <DialogContent dividers>
           {detail ? (
             <Stack spacing={2} sx={{ pt: 1 }}>
-              <Typography><strong>לקוח:</strong> {detail.accountName}</Typography>
-              <Typography><strong>טלפון:</strong> {formatCsPhoneDisplay(detail.phoneNumber)}</Typography>
-              <Typography><strong>עסק:</strong> {detail.businessName}</Typography>
-              <Typography><strong>תחום:</strong> {detail.specialtiesCategory}</Typography>
+              <Typography>
+                <strong>לקוח:</strong>{' '}
+                {detail.customerName || detail.accountName || '—'}
+              </Typography>
+              <Typography>
+                <strong>טלפון:</strong>{' '}
+                {formatCsPhoneDisplay(detail.customerPhone || detail.phoneNumber)}
+              </Typography>
+              <Typography>
+                <strong>בעל מקצוע:</strong> {jobProDisplay(detail)}
+              </Typography>
+              <Typography>
+                <strong>עסק:</strong> {detail.businessName || '—'}
+              </Typography>
+              <Typography>
+                <strong>תחום:</strong>{' '}
+                {detail.leadDomain || detail.specialtiesCategory || '—'}
+              </Typography>
+              <Typography>
+                <strong>עיר:</strong> {detail.city || '—'}
+              </Typography>
               {detail.leadDomain ? (
                 <Typography variant="body2" color="text.secondary">
                   נשלח לרלוונטים (תחום לחיוב): {detail.leadDomain}
@@ -1031,6 +1232,18 @@ export default function JobsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="פניות"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

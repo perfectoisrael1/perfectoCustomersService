@@ -9,7 +9,8 @@ export type User = { id: number; fullName: string; username: string; role?: stri
 
 export type Job = {
   id: number
-  accountId: number
+  /** null כשאין בעל מקצוע משויך */
+  accountId: number | null
   serialId: string | null
   accountName: string
   phoneNumber: string
@@ -17,6 +18,11 @@ export type Job = {
   specialtiesCategory: string
   /** מולא אחרי שליחת וובהוק התאמה לרלוונטים — ריק אם הפנייה לא נוצרה דרך התהליך הזה */
   leadDomain: string
+  /** עיר מהוובהוק (`city` / `עיר`) */
+  city?: string
+  /** שם לקוח קצה מהוובהוק (כשיש) */
+  customerName?: string
+  customerPhone?: string
   description: string
   status: string
   statusLabel: string
@@ -112,11 +118,17 @@ export type Task = {
 
 export type Domain = {
   id: number
+  siteName: string | null
   domainName: string
   status: string | null
   purchaseDate: string | null
   renewalDate: string | null
   isCompleted: boolean
+  owner: string
+  organicPromotion: boolean | null
+  paidPromotion: boolean | null
+  inRecruitment: boolean | null
+  projectEnded: boolean | null
 }
 
 export type City = {
@@ -309,6 +321,86 @@ export async function getAccounts() {
   return csFetch<Account[]>('/customer-service/accounts')
 }
 
+export async function getAccountById(id: number) {
+  return csFetch<Account>(`/customer-service/accounts/${id}`)
+}
+
+let accountsSearchCache: Account[] | null = null
+let accountsSearchCachePromise: Promise<Account[]> | null = null
+
+async function loadAccountsSearchCache(): Promise<Account[]> {
+  if (accountsSearchCache) return accountsSearchCache
+  if (!accountsSearchCachePromise) {
+    accountsSearchCachePromise = getAccounts().then((rows) => {
+      accountsSearchCache = Array.isArray(rows) ? rows : []
+      return accountsSearchCache
+    })
+  }
+  return accountsSearchCachePromise
+}
+
+export async function searchAccountsForNotification(query: string, limit = 25): Promise<Account[]> {
+  const q = String(query || '').trim()
+  if (!q) return []
+
+  const digitsOnly = /^\d+$/.test(q)
+  const looksLikeAccountId =
+    digitsOnly && !q.startsWith('0') && q.length >= 1 && q.length <= 12
+
+  if (looksLikeAccountId) {
+    const id = Number(q)
+    if (Number.isFinite(id) && id > 0) {
+      try {
+        const acc = await getAccountById(id)
+        return acc ? [acc] : []
+      } catch {
+        if (q.length < 2) return []
+      }
+    }
+  }
+
+  if (q.length < 2) return []
+
+  const needle = q.toLowerCase()
+  const all = await loadAccountsSearchCache()
+  return all
+    .filter((a) => {
+      const name = String(a.accountName || '').toLowerCase()
+      const phone = String(a.phoneNumber || '').toLowerCase()
+      const business = String(a.businessName || '').toLowerCase()
+      const id = String(a.id)
+      return (
+        name.includes(needle)
+        || phone.includes(needle)
+        || business.includes(needle)
+        || id === needle
+      )
+    })
+    .slice(0, limit)
+}
+
+export type SendSupplierNotificationPayload = {
+  title: string
+  body: string
+  mode?: 'single' | 'all'
+  accountId?: number
+  accountIds?: number[]
+}
+
+export type SendSupplierNotificationResult = {
+  mode: 'single' | 'all'
+  sent: number
+  queued?: boolean
+  results?: Array<{ accountId: number; notificationId: string; ok: boolean }>
+}
+
+export async function sendSupplierNotification(body: SendSupplierNotificationPayload) {
+  return csFetch<SendSupplierNotificationResult>(
+    '/customer-service/supplier-notifications/send',
+    { method: 'POST', body },
+  )
+}
+
 export async function deleteAccount(id: number) {
   return csFetch<void>(`/customer-service/accounts/${id}`, { method: 'DELETE' })
 }
@@ -456,11 +548,17 @@ export async function getDomains() {
 }
 
 export type DomainInput = Partial<{
+  siteName: string | null
   domainName: string
   status: string | null
   purchaseDate: string | null
   renewalDate: string | null
   isCompleted: boolean
+  owner: string
+  organicPromotion: boolean | null
+  paidPromotion: boolean | null
+  inRecruitment: boolean | null
+  projectEnded: boolean | null
 }>
 
 export async function createDomain(body: DomainInput) {

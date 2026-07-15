@@ -6,6 +6,7 @@ import {
   DialogActions,
   DialogContent,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Select,
   Stack,
@@ -13,6 +14,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import type { Lead } from '../api/csApi'
 import type { LeadInput } from '../api/csApi'
 import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
@@ -21,6 +23,7 @@ import {
   LEADS_STATUS_COLORS,
   LEAD_PHONE_EMPHASIS,
   STANDARD_TABLE_BODY_FONT_PX,
+  buildLeadWhatsappUrl,
   getLeadStatusColors,
   leadFieldInputSx,
   leadStatusOptionsForForm,
@@ -88,6 +91,7 @@ export default function LeadEditDialog({
 
   const statusOptions = leadStatusOptionsForForm(form.status)
   const statusDisplay = getLeadStatusColors(form.status)
+  const whatsappUrl = buildLeadWhatsappUrl(form.phone)
 
   const rtlInput = { sx: { textAlign: 'right' as const, fontSize: 14, direction: 'rtl' as const } }
   const phoneInput = {
@@ -354,7 +358,34 @@ export default function LeadEditDialog({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'flex-end' }}>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
+          flexWrap: 'wrap',
+        }}
+      >
+        <IconButton
+          component="a"
+          href={whatsappUrl ?? undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          disabled={!whatsappUrl || saving}
+          aria-label="ווצאפ"
+          sx={{
+            borderRadius: 2,
+            backgroundColor: '#25D366',
+            color: '#000',
+            '&:hover': { backgroundColor: '#128C7E', color: '#000' },
+            '&.Mui-disabled': { backgroundColor: 'action.disabledBackground', color: 'action.disabled' },
+          }}
+        >
+          <WhatsAppIcon />
+        </IconButton>
         <Stack direction="row" spacing={1}>
           <Button onClick={() => onClose()} disabled={saving}>
             ביטול

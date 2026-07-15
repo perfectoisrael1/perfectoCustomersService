@@ -48,6 +48,14 @@ import {
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { useAuth } from '../context/useAuth'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
@@ -168,6 +176,7 @@ export default function TicketsPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -261,10 +270,15 @@ export default function TicketsPage() {
     return list
   }, [filteredTickets, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, rows, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, rows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: TicketsSortColumn) => {
     setSort((prev) =>
@@ -362,7 +376,21 @@ export default function TicketsPage() {
     }
   }
 
-  const colSpan = 7
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteTicket)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת קריאות')
+      throw err
+    }
+  }, [load, rowSelection])
+
+  const colSpan = 8
 
   return (
     <>
@@ -526,6 +554,11 @@ export default function TicketsPage() {
                     <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                       <TableHead>
                         <TableRow>
+                          <CsTableSelectAllHeaderCell
+                            pageRows={pageRows}
+                            selectedIds={rowSelection.selectedIds}
+                            onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                          />
                           <TableCell sortDirection={sort.col === 'name' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'name'}
@@ -602,6 +635,11 @@ export default function TicketsPage() {
                               sx={{ cursor: 'pointer' }}
                               onClick={() => openEdit(row)}
                             >
+                              <CsTableRowCheckboxCell
+                                rowId={row.id}
+                                selected={rowSelection.isSelected(row.id)}
+                                onToggle={rowSelection.toggleRow}
+                              />
                               <TableCell title={row.name || ''}>{row.name || '—'}</TableCell>
                               <TableCell>{formatCsPhoneDisplay(row.phoneNumber)}</TableCell>
                               <TableCell sx={{ overflow: 'visible', textOverflow: 'clip' }}>
@@ -628,7 +666,7 @@ export default function TicketsPage() {
                             </TableRow>
                           )
                         })}
-                        {sortedRows.length === 0 ? (
+                        {displayRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                               אין נתונים להצגה
@@ -640,7 +678,7 @@ export default function TicketsPage() {
                     </CsTableContainer>
                   <CsTablePaginationFooter
                     rowsPerPageOptions={[10, 25, 50, 100]}
-                    count={sortedRows.length}
+                    count={displayRows.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_e, next) => setPage(next)}
@@ -791,6 +829,18 @@ export default function TicketsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="קריאות"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

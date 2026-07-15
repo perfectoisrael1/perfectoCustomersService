@@ -6,13 +6,16 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   MenuItem,
+  Select,
   Stack,
   Tab,
   Table,
@@ -29,11 +32,19 @@ import { useTheme } from '@mui/material/styles'
 import AddIcon from '@mui/icons-material/Add'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import CloseIcon from '@mui/icons-material/Close'
-import DnsIcon from '@mui/icons-material/Dns'
+import PersonIcon from '@mui/icons-material/Person'
 import SearchIcon from '@mui/icons-material/Search'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -49,13 +60,32 @@ import {
   type DomainInput,
 } from '../api/csApi'
 
-type DomainTab = 'expiringThisMonth' | 'all'
+type DomainTab = 'expiringThisMonth' | 'itamar' | 'yonatan'
+
+const DOMAIN_OWNER_ITAMAR = 'איתמר'
+const DOMAIN_OWNER_YONATAN = 'יונתן'
+const DOMAIN_OWNER_OPTIONS = [DOMAIN_OWNER_ITAMAR, DOMAIN_OWNER_YONATAN]
 
 type DomainsSortColumn =
   | 'domainName'
+  | 'siteName'
   | 'status'
+  | 'owner'
   | 'purchaseDate'
   | 'renewalDate'
+
+type DomainFlagKey =
+  | 'organicPromotion'
+  | 'paidPromotion'
+  | 'inRecruitment'
+  | 'projectEnded'
+
+const DOMAIN_FLAG_COLUMNS: { key: DomainFlagKey; label: string }[] = [
+  { key: 'organicPromotion', label: 'קידום אורגני' },
+  { key: 'paidPromotion', label: 'קידום ממומן' },
+  { key: 'inRecruitment', label: 'בגיוס' },
+  { key: 'projectEnded', label: 'פרויקט הסתיים' },
+]
 
 const DOMAIN_STATUS_OPTIONS = ['פעיל', 'ממתין', 'פג תוקף', 'בביטול']
 
@@ -150,8 +180,12 @@ function domainSortValue(row: Domain, col: DomainsSortColumn): string {
   switch (col) {
     case 'domainName':
       return String(row.domainName ?? '')
+    case 'siteName':
+      return String(row.siteName ?? '')
     case 'status':
       return String(row.status ?? '')
+    case 'owner':
+      return String(row.owner ?? '')
     case 'purchaseDate':
       return row.purchaseDate ? String(row.purchaseDate).slice(0, 10) : ''
     case 'renewalDate':
@@ -203,12 +237,14 @@ export default function DomainsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = useMemo<DomainTab>(() => {
     const t = searchParams.get('tab')
-    return t === 'all' ? 'all' : 'expiringThisMonth'
+    if (t === 'itamar') return 'itamar'
+    if (t === 'yonatan') return 'yonatan'
+    return 'expiringThisMonth'
   }, [searchParams])
 
   const setDomainTab = (next: DomainTab) => {
     if (next === 'expiringThisMonth') setSearchParams({}, { replace: true })
-    else setSearchParams({ tab: 'all' }, { replace: true })
+    else setSearchParams({ tab: next }, { replace: true })
   }
 
   const [rows, setRows] = useState<Domain[]>([])
@@ -218,6 +254,8 @@ export default function DomainsPage() {
   const [editor, setEditor] = useState<Domain | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DomainInput>({})
+  const [ownerSavingId, setOwnerSavingId] = useState<number | null>(null)
+  const [flagSavingKey, setFlagSavingKey] = useState<string | null>(null)
 
   const [sort, setSort] = useState<{ col: DomainsSortColumn; dir: 'asc' | 'desc' }>({
     col: 'renewalDate',
@@ -225,6 +263,7 @@ export default function DomainsPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -244,15 +283,16 @@ export default function DomainsPage() {
   }, [load])
 
   const baseRows = useMemo(() => {
-    if (tab === 'expiringThisMonth') return rows.filter((r) => isRenewalThisMonth(r.renewalDate))
-    return rows
+    if (tab === 'itamar') return rows.filter((r) => r.owner === DOMAIN_OWNER_ITAMAR)
+    if (tab === 'yonatan') return rows.filter((r) => r.owner === DOMAIN_OWNER_YONATAN)
+    return rows.filter((r) => isRenewalThisMonth(r.renewalDate))
   }, [rows, tab])
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return baseRows
     return baseRows.filter((r) => {
-      const blob = [r.domainName, r.status, r.purchaseDate, r.renewalDate]
+      const blob = [r.domainName, r.siteName, r.status, r.owner, r.purchaseDate, r.renewalDate]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
       return blob.includes(q)
@@ -275,10 +315,15 @@ export default function DomainsPage() {
     return list
   }, [filteredRows, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, rows, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, rows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: DomainsSortColumn) => {
     setSort((prev) =>
@@ -291,17 +336,30 @@ export default function DomainsPage() {
   const counts = useMemo(
     () => ({
       expiringThisMonth: rows.filter((r) => isRenewalThisMonth(r.renewalDate)).length,
-      all: rows.length,
+      itamar: rows.filter((r) => r.owner === DOMAIN_OWNER_ITAMAR).length,
+      yonatan: rows.filter((r) => r.owner === DOMAIN_OWNER_YONATAN).length,
     }),
     [rows],
   )
 
+  const defaultOwnerForTab = (activeTab: DomainTab): string => {
+    if (activeTab === 'itamar') return DOMAIN_OWNER_ITAMAR
+    if (activeTab === 'yonatan') return DOMAIN_OWNER_YONATAN
+    return ''
+  }
+
   const openNew = () => {
     setForm({
       domainName: '',
+      siteName: '',
       status: '',
       purchaseDate: null,
       renewalDate: null,
+      owner: defaultOwnerForTab(tab),
+      organicPromotion: false,
+      paidPromotion: false,
+      inRecruitment: false,
+      projectEnded: false,
     })
     setEditor('new')
   }
@@ -309,18 +367,30 @@ export default function DomainsPage() {
   const openEdit = (row: Domain) => {
     setForm({
       domainName: row.domainName,
+      siteName: row.siteName || '',
       status: row.status,
       purchaseDate: row.purchaseDate ? String(row.purchaseDate).slice(0, 10) : null,
       renewalDate: row.renewalDate ? String(row.renewalDate).slice(0, 10) : null,
+      owner: row.owner || '',
+      organicPromotion: row.organicPromotion === true,
+      paidPromotion: row.paidPromotion === true,
+      inRecruitment: row.inRecruitment === true,
+      projectEnded: row.projectEnded === true,
     })
     setEditor(row)
   }
 
   const buildSaveBody = (): DomainInput => ({
     domainName: String(form.domainName || '').trim(),
+    siteName: String(form.siteName || '').trim() || null,
     status: form.status ?? null,
     purchaseDate: form.purchaseDate ?? null,
     renewalDate: form.renewalDate ?? null,
+    owner: form.owner?.trim() || '',
+    organicPromotion: form.organicPromotion === true,
+    paidPromotion: form.paidPromotion === true,
+    inRecruitment: form.inRecruitment === true,
+    projectEnded: form.projectEnded === true,
   })
 
   const save = async () => {
@@ -359,7 +429,55 @@ export default function DomainsPage() {
     }
   }
 
-  const colSpan = 4
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteDomain)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת דומיינים')
+      throw err
+    }
+  }, [load, rowSelection])
+
+  const handleInlineOwnerChange = async (row: Domain, newOwner: string) => {
+    const nextOwner = newOwner.trim()
+    if (!row?.id || nextOwner === (row.owner || '').trim()) return
+    setOwnerSavingId(row.id)
+    setError(null)
+    try {
+      await patchDomain(row.id, { owner: nextOwner })
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, owner: nextOwner } : r)))
+      setEditor((ed) => (ed && ed !== 'new' && ed.id === row.id ? { ...ed, owner: nextOwner } : ed))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בעדכון אחראי')
+      await load()
+    } finally {
+      setOwnerSavingId(null)
+    }
+  }
+
+  const handleInlineFlagChange = async (row: Domain, key: DomainFlagKey, checked: boolean) => {
+    if (!row?.id) return
+    const savingKey = `${row.id}:${key}`
+    setFlagSavingKey(savingKey)
+    setError(null)
+    try {
+      await patchDomain(row.id, { [key]: checked })
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, [key]: checked } : r)))
+      setEditor((ed) => (ed && ed !== 'new' && ed.id === row.id ? { ...ed, [key]: checked } : ed))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בעדכון שדה')
+      await load()
+    } finally {
+      setFlagSavingKey(null)
+    }
+  }
+
+  const colSpan = 11
 
   return (
     <>
@@ -425,10 +543,17 @@ export default function DomainsPage() {
                       )}
                     />
                     <Tab
-                      value="all"
+                      value="itamar"
                       label={domainTabLabel(
-                        <DnsIcon sx={{ fontSize: 18, opacity: 0.9 }} />,
-                        `כל הדומיינים (${counts.all})`,
+                        <PersonIcon sx={{ fontSize: 18, opacity: 0.9 }} />,
+                        `דומיינים איתמר (${counts.itamar})`,
+                      )}
+                    />
+                    <Tab
+                      value="yonatan"
+                      label={domainTabLabel(
+                        <PersonIcon sx={{ fontSize: 18, opacity: 0.9 }} />,
+                        `דומיינים יונתן (${counts.yonatan})`,
                       )}
                     />
                   </Tabs>
@@ -546,13 +671,27 @@ export default function DomainsPage() {
                       <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                         <TableHead>
                           <TableRow>
+                            <CsTableSelectAllHeaderCell
+                              pageRows={pageRows}
+                              selectedIds={rowSelection.selectedIds}
+                              onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                            />
                             <TableCell sortDirection={sort.col === 'domainName' ? sort.dir : false}>
                               <TableSortLabel
                                 active={sort.col === 'domainName'}
                                 direction={sort.col === 'domainName' ? sort.dir : 'asc'}
                                 onClick={() => onSortColumn('domainName')}
                               >
-                                שם
+                                שם הדומיין
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={sort.col === 'siteName' ? sort.dir : false}>
+                              <TableSortLabel
+                                active={sort.col === 'siteName'}
+                                direction={sort.col === 'siteName' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('siteName')}
+                              >
+                                שם האתר
                               </TableSortLabel>
                             </TableCell>
                             <TableCell sortDirection={sort.col === 'status' ? sort.dir : false}>
@@ -562,6 +701,15 @@ export default function DomainsPage() {
                                 onClick={() => onSortColumn('status')}
                               >
                                 סטטוס
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={sort.col === 'owner' ? sort.dir : false}>
+                              <TableSortLabel
+                                active={sort.col === 'owner'}
+                                direction={sort.col === 'owner' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('owner')}
+                              >
+                                אחראי
                               </TableSortLabel>
                             </TableCell>
                             <TableCell sortDirection={sort.col === 'purchaseDate' ? sort.dir : false}>
@@ -582,12 +730,17 @@ export default function DomainsPage() {
                                 תאריך חידוש
                               </TableSortLabel>
                             </TableCell>
+                            {DOMAIN_FLAG_COLUMNS.map((col) => (
+                              <TableCell key={col.key} align="center" sx={{ whiteSpace: 'nowrap' }}>
+                                {col.label}
+                              </TableCell>
+                            ))}
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {pageRows.map((row) => {
                             const highlightExpiringThisMonth =
-                              tab === 'all' && isRenewalThisMonth(row.renewalDate)
+                              tab !== 'expiringThisMonth' && isRenewalThisMonth(row.renewalDate)
                             return (
                             <TableRow
                               key={row.id}
@@ -595,23 +748,112 @@ export default function DomainsPage() {
                               sx={{ cursor: 'pointer' }}
                               onClick={() => openEdit(row)}
                             >
+                              <CsTableRowCheckboxCell
+                                rowId={row.id}
+                                selected={rowSelection.isSelected(row.id)}
+                                onToggle={rowSelection.toggleRow}
+                              />
                               <TableCell
                                 title={row.domainName}
                                 sx={highlightExpiringThisMonth ? DOMAIN_EXPIRING_THIS_MONTH_HIGHLIGHT_SX : undefined}
                               >
                                 {row.domainName || '—'}
                               </TableCell>
+                              <TableCell title={row.siteName || undefined}>
+                                {row.siteName || '—'}
+                              </TableCell>
                               <TableCell>{row.status || '—'}</TableCell>
+                              <TableCell
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                sx={{
+                                  py: 0.5,
+                                  px: 0.5,
+                                  verticalAlign: 'middle',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Select
+                                  size="small"
+                                  value={row.owner || ''}
+                                  disabled={ownerSavingId === row.id}
+                                  onChange={(e) => void handleInlineOwnerChange(row, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  variant="standard"
+                                  disableUnderline
+                                  displayEmpty
+                                  renderValue={(selected) => {
+                                    if (ownerSavingId === row.id) {
+                                      return <CircularProgress size={18} />
+                                    }
+                                    return selected || '—'
+                                  }}
+                                  sx={{
+                                    fontSize: 15,
+                                    width: '100%',
+                                    direction: 'rtl',
+                                    '& .MuiSelect-select': {
+                                      py: 0,
+                                      textAlign: 'right',
+                                      pr: '0 !important',
+                                      pl: '18px !important',
+                                    },
+                                    '& .MuiSelect-icon': {
+                                      left: 0,
+                                      right: 'auto',
+                                    },
+                                  }}
+                                  MenuProps={DOMAIN_EDITOR_SELECT_MENU_PROPS}
+                                >
+                                  <MenuItem value="">—</MenuItem>
+                                  {row.owner &&
+                                  !DOMAIN_OWNER_OPTIONS.includes(row.owner) ? (
+                                    <MenuItem value={row.owner}>{row.owner}</MenuItem>
+                                  ) : null}
+                                  {DOMAIN_OWNER_OPTIONS.map((owner) => (
+                                    <MenuItem key={owner} value={owner}>
+                                      {owner}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </TableCell>
                               <TableCell>{formatDateCell(row.purchaseDate)}</TableCell>
                               <TableCell
                                 sx={highlightExpiringThisMonth ? DOMAIN_EXPIRING_THIS_MONTH_HIGHLIGHT_SX : undefined}
                               >
                                 {formatDateCell(row.renewalDate)}
                               </TableCell>
+                              {DOMAIN_FLAG_COLUMNS.map((col) => {
+                                const saving = flagSavingKey === `${row.id}:${col.key}`
+                                return (
+                                  <TableCell
+                                    key={col.key}
+                                    align="center"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    sx={{ py: 0.25, px: 0.5 }}
+                                  >
+                                    {saving ? (
+                                      <CircularProgress size={18} />
+                                    ) : (
+                                      <Checkbox
+                                        size="small"
+                                        checked={row[col.key] === true}
+                                        onChange={(e) =>
+                                          void handleInlineFlagChange(row, col.key, e.target.checked)
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        slotProps={{ input: { 'aria-label': col.label } }}
+                                      />
+                                    )}
+                                  </TableCell>
+                                )
+                              })}
                             </TableRow>
                             )
                           })}
-                          {sortedRows.length === 0 ? (
+                          {displayRows.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                                 אין נתונים להצגה
@@ -623,7 +865,7 @@ export default function DomainsPage() {
                     </CsTableContainer>
                     <CsTablePaginationFooter
                       rowsPerPageOptions={[10, 25, 50, 100]}
-                      count={sortedRows.length}
+                      count={displayRows.length}
                       rowsPerPage={rowsPerPage}
                       page={page}
                       onPageChange={(_e, next) => setPage(next)}
@@ -653,12 +895,21 @@ export default function DomainsPage() {
           menuDisabled={saving}
         />
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, direction: 'rtl', textAlign: 'right' }}>
-          <DomainField label="שם">
+          <DomainField label="שם הדומיין">
             <TextField
               value={form.domainName || ''}
               onChange={(e) => setForm((f) => ({ ...f, domainName: e.target.value }))}
               fullWidth
               required
+              sx={DOMAIN_EDITOR_RTL_FIELD_SX}
+              slotProps={{ htmlInput: { dir: 'rtl' } }}
+            />
+          </DomainField>
+          <DomainField label="שם האתר">
+            <TextField
+              value={form.siteName || ''}
+              onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))}
+              fullWidth
               sx={DOMAIN_EDITOR_RTL_FIELD_SX}
               slotProps={{ htmlInput: { dir: 'rtl' } }}
             />
@@ -695,6 +946,48 @@ export default function DomainsPage() {
             value={form.renewalDate}
             onChange={(next) => setForm((f) => ({ ...f, renewalDate: next }))}
           />
+          <DomainField label="אחראי">
+            <TextField
+              select
+              value={form.owner || ''}
+              onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))}
+              fullWidth
+              sx={DOMAIN_EDITOR_RTL_FIELD_SX}
+              slotProps={{
+                select: {
+                  displayEmpty: true,
+                  MenuProps: DOMAIN_EDITOR_SELECT_MENU_PROPS,
+                },
+              }}
+            >
+              <MenuItem value="">—</MenuItem>
+              {DOMAIN_OWNER_OPTIONS.map((owner) => (
+                <MenuItem key={owner} value={owner}>
+                  {owner}
+                </MenuItem>
+              ))}
+            </TextField>
+          </DomainField>
+          <Stack spacing={0.5} sx={{ direction: 'rtl' }}>
+            {DOMAIN_FLAG_COLUMNS.map((col) => (
+              <FormControlLabel
+                key={col.key}
+                control={
+                  <Checkbox
+                    checked={form[col.key] === true}
+                    onChange={(e) => setForm((f) => ({ ...f, [col.key]: e.target.checked }))}
+                  />
+                }
+                label={col.label}
+                sx={{
+                  mr: 0,
+                  ml: 0,
+                  direction: 'rtl',
+                  '& .MuiFormControlLabel-label': { textAlign: 'right' },
+                }}
+              />
+            ))}
+          </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1, direction: 'rtl' }}>
           <Button onClick={() => setEditor(null)} disabled={saving}>
@@ -705,6 +998,18 @@ export default function DomainsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="דומיינים"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

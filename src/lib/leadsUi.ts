@@ -149,6 +149,20 @@ export function formatLeadPhoneDisplay(val: string | null | undefined): string {
   return normalized
 }
 
+/** מספר טלפון בפורמט wa.me (972…) */
+export function leadWhatsappE164Digits(phone: string | null | undefined): string {
+  let d = String(phone || '').replace(/\D/g, '')
+  if (!d) return ''
+  if (d.startsWith('972')) return d
+  if (d.startsWith('0')) return `972${d.slice(1)}`
+  return d
+}
+
+export function buildLeadWhatsappUrl(phone: string | null | undefined): string | null {
+  const d = leadWhatsappE164Digits(phone)
+  return d ? `https://wa.me/${d}` : null
+}
+
 export const leadFieldInputSx = {
   mt: 0.5,
   '& .MuiOutlinedInput-root': {

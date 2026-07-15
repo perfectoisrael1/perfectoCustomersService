@@ -43,6 +43,14 @@ import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from
 import CsTableContainer from '../components/CsStandardTable'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
+import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
   GAP_BELOW_INNER_NAV_PX,
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
@@ -137,6 +145,7 @@ export default function LeadsPage() {
   })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -225,10 +234,15 @@ export default function LeadsPage() {
     return rows
   }, [filtered, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, allRows, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, allRows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const onSortColumn = useCallback((col: LeadsSortColumn) => {
     setSort((prev) =>
@@ -303,7 +317,21 @@ export default function LeadsPage() {
     }
   }
 
-  const colSpan = 9
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deleteLead)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await loadAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת לידים')
+      throw err
+    }
+  }, [loadAll, rowSelection])
+
+  const colSpan = 10
 
   return (
     <>
@@ -496,6 +524,11 @@ export default function LeadsPage() {
                       <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                       <TableHead>
                         <TableRow>
+                          <CsTableSelectAllHeaderCell
+                            pageRows={pageRows}
+                            selectedIds={rowSelection.selectedIds}
+                            onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                          />
                           <TableCell align="center" sortDirection={sort.col === 'name' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'name'}
@@ -591,6 +624,11 @@ export default function LeadsPage() {
                               sx={{ cursor: 'pointer' }}
                               onClick={() => openEdit(row)}
                             >
+                              <CsTableRowCheckboxCell
+                                rowId={row.id}
+                                selected={rowSelection.isSelected(row.id)}
+                                onToggle={rowSelection.toggleRow}
+                              />
                               <TableCell align="center" title={row.name || ''}>
                                 {row.name || '—'}
                               </TableCell>
@@ -701,7 +739,7 @@ export default function LeadsPage() {
                             </TableRow>
                           )
                         })}
-                        {sortedRows.length === 0 ? (
+                        {displayRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                               אין נתונים להצגה
@@ -713,7 +751,7 @@ export default function LeadsPage() {
                     </CsTableContainer>
                   <CsTablePaginationFooter
                     rowsPerPageOptions={[10, 25, 50, 100]}
-                    count={sortedRows.length}
+                    count={displayRows.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_e, next) => setPage(next)}
@@ -744,6 +782,18 @@ export default function LeadsPage() {
         onSave={handleSave}
         onDelete={handleDelete}
       />
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="לידים"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

@@ -31,6 +31,14 @@ import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  CsTableSelectionDeleteButton,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { deleteSelectedIds, prependSelectedNotInList } from '../lib/csTableListHelpers'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import {
   STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
@@ -39,6 +47,7 @@ import {
 } from '../layout/headerLayout'
 import {
   createPerfectoCustomerServiceUser,
+  deletePerfectoCustomerServiceUser,
   getPerfectoCustomerServiceUsers,
   patchPerfectoCustomerServiceUser,
   type PerfectoCustomerServiceUser,
@@ -129,6 +138,7 @@ export default function CompanyEmployeesPage() {
   const [sort, setSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'id', dir: 'asc' })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rowSelection = useCsTableSelection()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -204,10 +214,15 @@ export default function CompanyEmployeesPage() {
     return list
   }, [filtered, sort])
 
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(sortedRows, rows, rowSelection.selectedIds, (r) => r.id),
+    [sortedRows, rows, rowSelection.selectedIds],
+  )
+
   const pageRows = useMemo(() => {
     const start = page * rowsPerPage
-    return sortedRows.slice(start, start + rowsPerPage)
-  }, [sortedRows, page, rowsPerPage])
+    return displayRows.slice(start, start + rowsPerPage)
+  }, [displayRows, page, rowsPerPage])
 
   const rolesFromRows = useMemo(
     () =>
@@ -396,6 +411,20 @@ export default function CompanyEmployeesPage() {
 
   const dialogTitle = editor === 'new' ? 'עובד חדש' : editor ? 'עריכת עובד' : ''
 
+  const bulkDeleteSelected = useCallback(async () => {
+    setError(null)
+    const ids = rowSelection.selectedIds
+    try {
+      await deleteSelectedIds(ids, deletePerfectoCustomerServiceUser)
+      setEditor((ed) => (ed && ed !== 'new' && ids.has(ed.id) ? null : ed))
+      rowSelection.clearSelection()
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת עובדים')
+      throw err
+    }
+  }, [load, rowSelection])
+
   const sortedEditKeys =
     editor === 'new'
       ? ['username', 'fullName', 'password', 'role']
@@ -441,7 +470,7 @@ export default function CompanyEmployeesPage() {
     '& .MuiSelect-icon': { left: 8, right: 'auto' },
   } as const
 
-  const colSpan = tableColumns.length + 1
+  const colSpan = tableColumns.length + 2
 
   return (
     <>
@@ -606,6 +635,11 @@ export default function CompanyEmployeesPage() {
                     >
                       <TableHead>
                         <TableRow>
+                          <CsTableSelectAllHeaderCell
+                            pageRows={pageRows}
+                            selectedIds={rowSelection.selectedIds}
+                            onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                          />
                           <TableCell sx={{ fontWeight: 800, ...companyEmployeesNarrowTableCellSx }}>פעולות</TableCell>
                           {tableColumns.map((col) => (
                             <TableCell
@@ -628,6 +662,11 @@ export default function CompanyEmployeesPage() {
                       <TableBody>
                         {pageRows.map((row) => (
                           <TableRow key={row.id} hover>
+                            <CsTableRowCheckboxCell
+                              rowId={row.id}
+                              selected={rowSelection.isSelected(row.id)}
+                              onToggle={rowSelection.toggleRow}
+                            />
                             <TableCell sx={{ ...companyEmployeesNarrowTableCellSx, whiteSpace: 'nowrap' }}>
                               <Button
                                 size="small"
@@ -647,7 +686,7 @@ export default function CompanyEmployeesPage() {
                             ))}
                           </TableRow>
                         ))}
-                        {sortedRows.length === 0 ? (
+                        {displayRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={colSpan} align="center" sx={{ py: 6 }}>
                               אין נתונים להצגה
@@ -659,7 +698,7 @@ export default function CompanyEmployeesPage() {
                     </CsTableContainer>
                   <CsTablePaginationFooter
                     rowsPerPageOptions={[10, 25, 50, 100]}
-                    count={sortedRows.length}
+                    count={displayRows.length}
                     rowsPerPage={rowsPerPage}
                     page={page}
                     onPageChange={(_e, next) => setPage(next)}
@@ -835,6 +874,18 @@ export default function CompanyEmployeesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      >
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="עובדים"
+          onDelete={bulkDeleteSelected}
+        />
+      </CsTableSelectionBar>
     </>
   )
 }

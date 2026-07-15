@@ -33,11 +33,19 @@ import {
 } from '../api/csApi'
 import {
   accountMatchesCityAndDomain,
+  accountMatchesDomain,
   formatAccountCitiesDisplay,
   formatAccountDomainsDisplay,
   formatAccountStatusAvailabilityDisplay,
 } from '../lib/accountsUi'
 import { csDataTableSx } from '../lib/csTableUi'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { prependSelectedNotInList } from '../lib/csTableListHelpers'
 
 type BreakdownRow = { label: string; count: number }
 
@@ -141,6 +149,11 @@ function BreakdownTable({
   onCountClick?: (city: string, count: number) => void
 }) {
   const theme = useTheme()
+  const rowSelection = useCsTableSelection({ getRowId: (row) => (row as BreakdownRow).label })
+  const displayRows = useMemo(
+    () => prependSelectedNotInList(rows, rows, rowSelection.selectedIds, (row) => row.label),
+    [rows, rowSelection.selectedIds],
+  )
 
   if (rows.length === 0) {
     return (
@@ -151,16 +164,23 @@ function BreakdownTable({
   }
 
   return (
+    <>
     <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
       <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
         <TableHead>
           <TableRow>
+            <CsTableSelectAllHeaderCell
+              pageRows={displayRows}
+              getRowId={(row) => (row as BreakdownRow).label}
+              selectedIds={rowSelection.selectedIds}
+              onTogglePage={() => rowSelection.toggleAllOnPage(displayRows)}
+            />
             <TableCell>{nameColumn}</TableCell>
             <TableCell>מספר ספקים</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map((row) => {
+          {displayRows.map((row) => {
             const highlightRow =
               highlightMinCount != null && row.count >= highlightMinCount
             return (
@@ -169,6 +189,11 @@ function BreakdownTable({
               hover
               sx={supplierRowHighlightSx(highlightRow)}
             >
+              <CsTableRowCheckboxCell
+                rowId={row.label}
+                selected={rowSelection.isSelected(row.label)}
+                onToggle={rowSelection.toggleRow}
+              />
               <TableCell>{row.label}</TableCell>
               <TableCell
                 onClick={
@@ -187,6 +212,12 @@ function BreakdownTable({
         </TableBody>
       </Table>
     </TableContainer>
+    <CsTableSelectionBar
+      open={rowSelection.selectedCount > 0}
+      selectedCount={rowSelection.selectedCount}
+      onClear={rowSelection.clearSelection}
+    />
+    </>
   )
 }
 
@@ -250,12 +281,31 @@ export default function CitiesPage() {
     )
   }, [selectedDomain, catalogCities, accounts])
 
+  const selectedDomainTotalSuppliers = useMemo(() => {
+    if (!selectedDomain) return 0
+    return accounts.filter((a) =>
+      accountMatchesDomain(a.specialties, a.specialtiesCategory, selectedDomain),
+    ).length
+  }, [selectedDomain, accounts])
+
   const popupSuppliers = useMemo(() => {
     if (!suppliersPopup) return []
     return suppliersInCityAndDomain(accounts, suppliersPopup.city, suppliersPopup.domain).sort(
       (a, b) => String(a.accountName || '').localeCompare(String(b.accountName || ''), 'he'),
     )
   }, [suppliersPopup, accounts])
+
+  const popupRowSelection = useCsTableSelection()
+  const displayPopupSuppliers = useMemo(
+    () =>
+      prependSelectedNotInList(
+        popupSuppliers,
+        popupSuppliers,
+        popupRowSelection.selectedIds,
+        (r) => r.id,
+      ),
+    [popupSuppliers, popupRowSelection.selectedIds],
+  )
 
   const handleCountClick = useCallback(
     (city: string, _count: number) => {
@@ -298,7 +348,7 @@ export default function CitiesPage() {
           ) : selectedDomain ? (
             <Box>
               <Typography sx={{ fontWeight: 700, mb: 1 }}>
-                ערים בתחום: {selectedDomain}
+                ערים בתחום: {selectedDomain} ({selectedDomainTotalSuppliers})
               </Typography>
               <BreakdownTable
                 rows={selectedDomainCityRows}
@@ -351,6 +401,11 @@ export default function CitiesPage() {
               <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
                 <TableHead>
                   <TableRow>
+                    <CsTableSelectAllHeaderCell
+                      pageRows={displayPopupSuppliers}
+                      selectedIds={popupRowSelection.selectedIds}
+                      onTogglePage={() => popupRowSelection.toggleAllOnPage(displayPopupSuppliers)}
+                    />
                     <TableCell>שם</TableCell>
                     <TableCell>תחומים</TableCell>
                     <TableCell>ערים</TableCell>
@@ -359,8 +414,13 @@ export default function CitiesPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {popupSuppliers.map((account) => (
+                  {displayPopupSuppliers.map((account) => (
                     <TableRow key={account.id} hover>
+                      <CsTableRowCheckboxCell
+                        rowId={account.id}
+                        selected={popupRowSelection.isSelected(account.id)}
+                        onToggle={popupRowSelection.toggleRow}
+                      />
                       <TableCell>{account.accountName || '—'}</TableCell>
                       <TableCell sx={{ maxWidth: 220 }} title={formatAccountDomainsDisplay(account)}>
                         {formatAccountDomainsDisplay(account)}
@@ -378,6 +438,12 @@ export default function CitiesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <CsTableSelectionBar
+        open={popupRowSelection.selectedCount > 0}
+        selectedCount={popupRowSelection.selectedCount}
+        onClear={popupRowSelection.clearSelection}
+      />
     </Card>
   )
 }

@@ -44,8 +44,21 @@ import {
   listAttendancePeersForResponsible,
   sumDailyElapsedForResponsible,
 } from '../lib/attendanceUtils'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  useCsTableSelection,
+} from './CsTableSelection'
+import { prependSelectedNotInList } from '../lib/csTableListHelpers'
 
 type Props = { canManageAvailability: boolean }
+
+function attendanceRowKey(row: unknown): string | number | undefined {
+  const r = row as AttendanceRecord & { virtual?: boolean; csUserId?: number }
+  if (r.virtual) return `v-${r.csUserId}`
+  return r.id
+}
 
 export default function EmployeeAvailabilityTable({ canManageAvailability }: Props) {
   const { token, user } = useAuth()
@@ -108,6 +121,13 @@ export default function EmployeeAvailabilityTable({ canManageAvailability }: Pro
     void liveTick
     return buildAttendanceDisplayRowsFromApi(rawAttendanceRows, csUsers, availabilityDate, getIsraelDateStamp())
   }, [rawAttendanceRows, csUsers, availabilityDate, liveTick])
+
+  const rowSelection = useCsTableSelection({ getRowId: attendanceRowKey })
+  const visibleRows = useMemo(
+    () =>
+      prependSelectedNotInList(displayRows, displayRows, rowSelection.selectedIds, attendanceRowKey),
+    [displayRows, rowSelection.selectedIds],
+  )
 
   const handleStop = async (record: AttendanceRecord) => {
     if (!record?.id || stoppingId) return
@@ -257,6 +277,12 @@ export default function EmployeeAvailabilityTable({ canManageAvailability }: Pro
         <Table size="small">
           <TableHead>
             <TableRow>
+              <CsTableSelectAllHeaderCell
+                pageRows={visibleRows}
+                getRowId={attendanceRowKey}
+                selectedIds={rowSelection.selectedIds}
+                onTogglePage={() => rowSelection.toggleAllOnPage(visibleRows)}
+              />
               <TableCell sx={{ fontWeight: 800 }}>עובד</TableCell>
               <TableCell sx={{ fontWeight: 800 }}>טיימר</TableCell>
               <TableCell sx={{ fontWeight: 800 }}>סטטוס</TableCell>
@@ -268,14 +294,19 @@ export default function EmployeeAvailabilityTable({ canManageAvailability }: Pro
             </TableRow>
           </TableHead>
           <TableBody>
-            {displayRows.map((r) => {
-              const key = r.virtual ? `v-${r.csUserId}` : String(r.id)
+            {visibleRows.map((r) => {
+              const key = attendanceRowKey(r)
               const sec = r.virtual ? 0 : sumDailyElapsedForResponsible(rawAttendanceRows, r.responsible || '')
               const statusLabel = getAvailabilityStatusLabel(r, rawAttendanceRows)
               const fileUrl = String(r.fileAttachmentUrl ?? r.file_attachment_url ?? '').trim()
               const active = isActive(r)
               return (
                 <TableRow key={key} sx={{ bgcolor: active ? 'rgba(255, 221, 0, 0.12)' : undefined }}>
+                  <CsTableRowCheckboxCell
+                    rowId={key}
+                    selected={rowSelection.isSelected(key)}
+                    onToggle={rowSelection.toggleRow}
+                  />
                   <TableCell>{r.responsible || '—'}</TableCell>
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{formatTime(sec)}</TableCell>
                   <TableCell>
@@ -380,14 +411,20 @@ export default function EmployeeAvailabilityTable({ canManageAvailability }: Pro
                 </TableRow>
               )
             })}
-            {!displayRows.length && !loading && (
+            {!visibleRows.length && !loading && (
               <TableRow>
-                <TableCell colSpan={8} align="center">אין נתונים</TableCell>
+                <TableCell colSpan={9} align="center">אין נתונים</TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </TableContainer>
+
+      <CsTableSelectionBar
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
+      />
     </Box>
   )
 }

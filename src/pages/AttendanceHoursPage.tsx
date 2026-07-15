@@ -36,6 +36,13 @@ import {
 } from '../lib/payslipsUi'
 import { STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS } from '../layout/headerLayout'
 import { csDataTableSx } from '../lib/csTableUi'
+import {
+  CsTableRowCheckboxCell,
+  CsTableSelectAllHeaderCell,
+  CsTableSelectionBar,
+  useCsTableSelection,
+} from '../components/CsTableSelection'
+import { prependSelectedNotInList } from '../lib/csTableListHelpers'
 
 const RANGE_OPTIONS = [
   { value: 'week', label: 'השבוע' },
@@ -213,6 +220,36 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [items])
 
+  const payslipSelection = useCsTableSelection({ getRowId: (row) => row as string })
+  const displayPayslipUrls = useMemo(
+    () =>
+      prependSelectedNotInList(
+        mergedPayslipUrls,
+        mergedPayslipUrls,
+        payslipSelection.selectedIds,
+        (url) => url,
+      ),
+    [mergedPayslipUrls, payslipSelection.selectedIds],
+  )
+
+  const dataSelection = useCsTableSelection({ getRowId: (row) => (row as [string, number])[0] })
+  const displayDailyTotals = useMemo(
+    () =>
+      prependSelectedNotInList(dailyTotals, dailyTotals, dataSelection.selectedIds, ([day]) => day),
+    [dailyTotals, dataSelection.selectedIds],
+  )
+
+  const attendanceSelection = useCsTableSelection({
+    getRowId: (row) => String((row as Record<string, unknown>).id ?? ''),
+  })
+  const displayAttendanceItems = useMemo(
+    () =>
+      prependSelectedNotInList(items, items, attendanceSelection.selectedIds, (r) =>
+        String(r.id ?? ''),
+      ),
+    [items, attendanceSelection.selectedIds],
+  )
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%', direction: 'rtl' }}>
       <Box
@@ -317,6 +354,12 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
               <Table size="small" stickyHeader dir="rtl" sx={csDataTableSx(theme)}>
                 <TableHead>
                   <TableRow>
+                    <CsTableSelectAllHeaderCell
+                      pageRows={displayPayslipUrls}
+                      getRowId={(row) => row as string}
+                      selectedIds={payslipSelection.selectedIds}
+                      onTogglePage={() => payslipSelection.toggleAllOnPage(displayPayslipUrls)}
+                    />
                     <TableCell sx={{ fontWeight: 800 }} align="right">
                       חודש
                     </TableCell>
@@ -329,15 +372,20 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {mergedPayslipUrls.length === 0 ? (
+                  {displayPayslipUrls.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+                      <TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 4 }}>
                         אין תלושים — אחרי העלאה, הם יופיעו כאן
                       </TableCell>
                     </TableRow>
                   ) : (
-                    mergedPayslipUrls.map((url, idx) => (
+                    displayPayslipUrls.map((url, idx) => (
                       <TableRow key={`${url}-${idx}`} hover>
+                        <CsTableRowCheckboxCell
+                          rowId={url}
+                          selected={payslipSelection.isSelected(url)}
+                          onToggle={payslipSelection.toggleRow}
+                        />
                         <TableCell align="right">{monthYearLabelFromPayslipUrl(url)}</TableCell>
                         <TableCell align="center">
                               <IconButton
@@ -379,20 +427,31 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
             <Table size="small" dir="rtl" sx={csDataTableSx(theme)}>
               <TableHead>
                 <TableRow>
+                  <CsTableSelectAllHeaderCell
+                    pageRows={displayDailyTotals}
+                    getRowId={(row) => (row as [string, number])[0]}
+                    selectedIds={dataSelection.selectedIds}
+                    onTogglePage={() => dataSelection.toggleAllOnPage(displayDailyTotals)}
+                  />
                   <TableCell sx={{ fontWeight: 800 }} align="right">תאריך</TableCell>
                   <TableCell sx={{ fontWeight: 800 }} align="right">שעות מצטברות</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {dailyTotals.map(([day, sec]) => (
+                {displayDailyTotals.map(([day, sec]) => (
                   <TableRow key={day}>
+                    <CsTableRowCheckboxCell
+                      rowId={day}
+                      selected={dataSelection.isSelected(day)}
+                      onToggle={dataSelection.toggleRow}
+                    />
                     <TableCell align="right">{day}</TableCell>
                     <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatTime(sec)}</TableCell>
                   </TableRow>
                 ))}
-                {!dailyTotals.length && !loading && (
+                {!displayDailyTotals.length && !loading && (
                   <TableRow>
-                    <TableCell colSpan={2} align="center">אין נתונים</TableCell>
+                    <TableCell colSpan={3} align="center">אין נתונים</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -404,6 +463,12 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
           <Table size="small" dir="rtl" sx={csDataTableSx(theme)}>
             <TableHead>
               <TableRow>
+                <CsTableSelectAllHeaderCell
+                  pageRows={displayAttendanceItems}
+                  getRowId={(row) => String((row as Record<string, unknown>).id ?? '')}
+                  selectedIds={attendanceSelection.selectedIds}
+                  onTogglePage={() => attendanceSelection.toggleAllOnPage(displayAttendanceItems)}
+                />
                 <TableCell sx={{ fontWeight: 800 }} align="right">זמן כניסה</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">שעות מצטברות</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">סטטוס</TableCell>
@@ -411,8 +476,13 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((r) => (
+              {displayAttendanceItems.map((r) => (
                 <TableRow key={String(r.id)}>
+                  <CsTableRowCheckboxCell
+                    rowId={String(r.id ?? '')}
+                    selected={attendanceSelection.isSelected(String(r.id ?? ''))}
+                    onToggle={attendanceSelection.toggleRow}
+                  />
                   <TableCell align="right">{formatDateInIsrael(String(r.createdAt ?? r.created_at ?? ''))}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
                     {formatTime(Number(r.totalSeconds ?? r.total_seconds) || 0)}
@@ -421,15 +491,35 @@ export default function AttendanceHoursPage({ routeBase = '/personal-area/attend
                   <TableCell align="right">{Math.trunc(Number(r.bonus) || 0)}</TableCell>
                 </TableRow>
               ))}
-              {!items.length && !loading && (
+              {!displayAttendanceItems.length && !loading && (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">אין רשומות</TableCell>
+                  <TableCell colSpan={5} align="center">אין רשומות</TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
         </TableContainer>
       )}
+
+      <CsTableSelectionBar
+        open={
+          (innerTab === 'payslips' && payslipSelection.selectedCount > 0)
+          || (innerTab === 'data' && dataSelection.selectedCount > 0)
+          || (innerTab === 'attendance' && attendanceSelection.selectedCount > 0)
+        }
+        selectedCount={
+          innerTab === 'payslips'
+            ? payslipSelection.selectedCount
+            : innerTab === 'data'
+              ? dataSelection.selectedCount
+              : attendanceSelection.selectedCount
+        }
+        onClear={() => {
+          if (innerTab === 'payslips') payslipSelection.clearSelection()
+          else if (innerTab === 'data') dataSelection.clearSelection()
+          else attendanceSelection.clearSelection()
+        }}
+      />
     </Box>
   )
 }
