@@ -244,6 +244,7 @@ export default function AccountsPage() {
       availability: 1,
       credits: 0,
       payPerLead: null,
+      membershipPaid: false,
       yearsOfExperience: null,
       slug: '',
     })
@@ -274,6 +275,7 @@ export default function AccountsPage() {
           : Number.parseInt(String(row.availability), 10),
       credits: row.credits,
       payPerLead: row.payPerLead,
+      membershipPaid: row.membershipPaid === true,
       yearsOfExperience:
         row.yearsOfExperience == null || row.yearsOfExperience === ''
           ? null

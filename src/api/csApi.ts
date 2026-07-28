@@ -53,6 +53,7 @@ export type Account = {
   slug: string | null
   availability: string | null
   credits: number | null
+  membershipPaid?: boolean | null
   password?: string | null
   createdAt: string
   updatedAt: string
@@ -420,6 +421,7 @@ export type AccountInput = Partial<{
   availability: number | null
   credits: number | null
   payPerLead: number | null
+  membershipPaid?: boolean
   yearsOfExperience: number | null
   slug: string | null
   password?: string | null

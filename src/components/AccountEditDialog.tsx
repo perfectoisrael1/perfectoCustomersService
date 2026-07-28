@@ -6,10 +6,12 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  FormControlLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -384,6 +386,25 @@ export default function AccountEditDialog({
           ))}
         </Select>
       </Field>
+      {!isNew ? (
+        <Field label="דמי הקמה">
+          <FormControlLabel
+            sx={{
+              m: 0,
+              mt: 0.5,
+              direction: 'rtl',
+              '& .MuiFormControlLabel-label': { textAlign: 'right', fontSize: 14 },
+            }}
+            control={(
+              <Switch
+                checked={form.membershipPaid === true}
+                onChange={(e) => setForm((f) => ({ ...f, membershipPaid: e.target.checked }))}
+              />
+            )}
+            label={form.membershipPaid === true ? 'שולם' : 'לא שולם'}
+          />
+        </Field>
+      ) : null}
       <Field label="טלפון (תצוגה)">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: ACCOUNT_PHONE_EMPHASIS, fontWeight: 600 }}>
           {formatCsPhoneDisplay(form.phoneNumber)}
