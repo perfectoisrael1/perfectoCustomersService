@@ -176,6 +176,18 @@ export default function LeadEditDialog({
                 />
               </Field>
             </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Field label="עיר">
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={form.city || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value || null }))}
+                  sx={leadFieldInputSx}
+                  slotProps={{ input: rtlInput }}
+                />
+              </Field>
+            </Box>
           </Box>
 
           <Field label="הערות" fullWidth>

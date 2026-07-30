@@ -72,6 +72,7 @@ type LeadsSortColumn =
   | 'name'
   | 'phone'
   | 'category'
+  | 'city'
   | 'followUpDate'
   | 'status'
   | 'leadType'
@@ -87,6 +88,8 @@ function leadSortValue(row: Lead, col: LeadsSortColumn): string {
       return String(row.phone ?? '')
     case 'category':
       return String(row.category ?? '')
+    case 'city':
+      return String(row.city ?? '')
     case 'followUpDate':
       return row.followUpDate ? String(row.followUpDate).slice(0, 19) : ''
     case 'status':
@@ -209,7 +212,7 @@ export default function LeadsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return tabRows
     return tabRows.filter((r) => {
-      const blob = [r.name, r.phone, r.businessName, r.status, r.responsible, r.category, r.details, r.leadType]
+      const blob = [r.name, r.phone, r.businessName, r.status, r.responsible, r.category, r.city, r.details, r.leadType]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
       const qd = q.replace(/\D/g, '')
@@ -271,6 +274,7 @@ export default function LeadsPage() {
       businessName: row.businessName || '',
       email: row.email,
       category: row.category,
+      city: row.city,
       status: row.status,
       responsible: row.responsible,
       details: row.details,
@@ -331,7 +335,7 @@ export default function LeadsPage() {
     }
   }, [loadAll, rowSelection])
 
-  const colSpan = 10
+  const colSpan = 11
 
   return (
     <>
@@ -556,6 +560,15 @@ export default function LeadsPage() {
                               תחום
                             </TableSortLabel>
                           </TableCell>
+                          <TableCell sortDirection={sort.col === 'city' ? sort.dir : false}>
+                            <TableSortLabel
+                              active={sort.col === 'city'}
+                              direction={sort.col === 'city' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('city')}
+                            >
+                              עיר
+                            </TableSortLabel>
+                          </TableCell>
                           <TableCell align="center" sortDirection={sort.col === 'followUpDate' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'followUpDate'}
@@ -647,6 +660,7 @@ export default function LeadsPage() {
                                 {formatLeadPhoneDisplay(row.phone)}
                               </TableCell>
                               <TableCell title={row.category || ''}>{row.category || '—'}</TableCell>
+                              <TableCell title={row.city || ''}>{row.city || '—'}</TableCell>
                               <TableCell align="center">
                                 {row.followUpDate ? String(row.followUpDate).slice(0, 10) : '—'}
                               </TableCell>

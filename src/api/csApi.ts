@@ -66,6 +66,7 @@ export type Lead = {
   phone: string
   email: string | null
   category: string | null
+  city: string | null
   isPaid: boolean
   amount: number | null
   bonus: number | null
@@ -450,6 +451,7 @@ export type LeadInput = Partial<{
   phone: string
   email: string | null
   category: string | null
+  city: string | null
   isPaid: boolean
   amount: number | null
   bonus: number | null
