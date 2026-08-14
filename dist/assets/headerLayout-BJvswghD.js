@@ -1,0 +1,1 @@
+var e=`--perfecto-app-bar-height-px`,t=`38px`,n=`calc(var(${e}, ${t}) + 0px)`,r=`calc(100dvh - var(${e}, ${t}) - 24px)`;export{r as n,n as r,e as t};

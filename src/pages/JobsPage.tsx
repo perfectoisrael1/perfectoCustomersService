@@ -33,6 +33,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
 import {
   formatCsPhoneDisplay,
+  formatCsDateTime,
   isCreatedTodayJerusalem,
   jobStatusChipColors,
 } from '../lib/caliberUi'
@@ -40,12 +41,15 @@ import {
   approveJobExclusion,
   broadcastInquiryByDomainAndCity,
   deleteJob,
+  deleteJobCampaign,
   getCities,
+  getJobCampaigns,
   getJobs,
   getServices,
   rejectJobExclusion,
   type City,
   type Job,
+  type JobCampaign,
   type Service,
 } from '../api/csApi'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
@@ -66,7 +70,18 @@ import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
 } from '../layout/headerLayout'
 
-type JobsTab = 'today' | 'exceptions' | 'unassigned' | 'search' | 'leave'
+type JobsTab = 'today' | 'exceptions' | 'unassigned' | 'search' | 'leave' | 'campaigns'
+
+type CampaignSortColumn =
+  | 'id'
+  | 'domain'
+  | 'city'
+  | 'customerName'
+  | 'statusLabel'
+  | 'dispatched'
+  | 'nextDripAt'
+  | 'claimedByAccountName'
+  | 'created'
 
 /** עמודות מיון לטבלת פניות (תואם עמודות תצוגה) */
 type JobsSortColumn =
@@ -121,7 +136,21 @@ function jobSortValue(row: Job, col: JobsSortColumn): string {
   return String(row[col] ?? '').trim()
 }
 
-const VALID_SEGMENTS: JobsTab[] = ['today', 'exceptions', 'unassigned', 'search', 'leave']
+const VALID_SEGMENTS: JobsTab[] = [
+  'today',
+  'exceptions',
+  'unassigned',
+  'search',
+  'leave',
+  'campaigns',
+]
+
+const CAMPAIGN_STATUS_CHIP: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
+  active: 'info',
+  claimed: 'success',
+  exhausted: 'warning',
+  unassigned: 'default',
+}
 
 function segmentToTab(segment: string | undefined): JobsTab {
   const s = String(segment || '').trim()
@@ -248,6 +277,7 @@ const autocompleteTextFieldSx = {
 }
 
 function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
+  if (tab === 'campaigns') return []
   if (tab === 'today') return all.filter((r) => isCreatedTodayJerusalem(r.created))
   if (tab === 'exceptions') {
     return all.filter((r) => {
@@ -268,7 +298,9 @@ export default function JobsPage() {
   const tab = segmentToTab(segment)
 
   const [allJobs, setAllJobs] = useState<Job[]>([])
+  const [allCampaigns, setAllCampaigns] = useState<JobCampaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [campaignsLoading, setCampaignsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<Job | null>(null)
@@ -286,9 +318,17 @@ export default function JobsPage() {
     col: 'created',
     dir: 'desc',
   })
+  const [campaignSort, setCampaignSort] = useState<{
+    col: CampaignSortColumn
+    dir: 'asc' | 'desc'
+  }>({
+    col: 'created',
+    dir: 'desc',
+  })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
   const rowSelection = useCsTableSelection()
+  const campaignRowSelection = useCsTableSelection()
 
   const [leaveDomain, setLeaveDomain] = useState('')
   const [leaveCity, setLeaveCity] = useState('')
@@ -350,6 +390,19 @@ export default function JobsPage() {
       navigate('/jobs/today', { replace: true })
     }
   }, [segment, navigate])
+
+  const loadCampaigns = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true
+    if (!silent) setCampaignsLoading(true)
+    setError(null)
+    try {
+      setAllCampaigns(await getJobCampaigns())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בטעינת קמפיינים')
+    } finally {
+      if (!silent) setCampaignsLoading(false)
+    }
+  }, [])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true
@@ -469,8 +522,17 @@ export default function JobsPage() {
   ])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void loadCampaigns({ silent: true })
+    if (tab === 'campaigns') {
+      rowSelection.clearSelection()
+      void loadCampaigns()
+      return
+    }
+    campaignRowSelection.clearSelection()
+    if (tab !== 'leave') {
+      void load()
+    }
+  }, [tab, load, loadCampaigns])
 
   const setTab = (next: JobsTab) => {
     const path = tabToPath(next)
@@ -507,7 +569,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [tab, query, sort.col, sort.dir])
+  }, [tab, query, sort.col, sort.dir, campaignSort.col, campaignSort.dir])
 
   const sortedRows = useMemo(() => {
     const rows = [...filtered]
@@ -545,8 +607,97 @@ export default function JobsPage() {
       exceptions: filterJobsForTab(allJobs, 'exceptions').length,
       unassigned: filterJobsForTab(allJobs, 'unassigned').length,
       search: allJobs.length,
+      campaigns: allCampaigns.length,
     }
-  }, [allJobs])
+  }, [allJobs, allCampaigns])
+
+  const filteredCampaigns = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return allCampaigns
+    return allCampaigns.filter((c) => {
+      const blob = [
+        c.id,
+        c.domain,
+        c.city,
+        c.customerName,
+        c.customerPhone,
+        c.description,
+        c.statusLabel,
+        c.claimedByAccountName,
+        c.claimedJobId,
+      ]
+        .map((x) => String(x ?? '').toLowerCase())
+        .join(' ')
+      const digits = q.replace(/\D/g, '')
+      const phone = String(c.customerPhone || '').replace(/\D/g, '')
+      return blob.includes(q) || (digits.length > 0 && phone.includes(digits))
+    })
+  }, [allCampaigns, query])
+
+  const sortedCampaigns = useMemo(() => {
+    const rows = [...filteredCampaigns]
+    const { col, dir } = campaignSort
+    rows.sort((a, b) => {
+      let av: string | number = ''
+      let bv: string | number = ''
+      if (col === 'dispatched') {
+        av = a.dispatchedCount
+        bv = b.dispatchedCount
+      } else if (col === 'id') {
+        av = a.id
+        bv = b.id
+      } else {
+        av = String(a[col] ?? '').trim()
+        bv = String(b[col] ?? '').trim()
+      }
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return dir === 'asc' ? av - bv : bv - av
+      }
+      const cmp = String(av).localeCompare(String(bv), 'he')
+      return dir === 'asc' ? cmp : -cmp
+    })
+    return rows
+  }, [filteredCampaigns, campaignSort])
+
+  const campaignDisplayRows = useMemo(
+    () =>
+      prependSelectedNotInList(
+        sortedCampaigns,
+        allCampaigns,
+        campaignRowSelection.selectedIds,
+        (r) => r.id,
+      ),
+    [sortedCampaigns, allCampaigns, campaignRowSelection.selectedIds],
+  )
+
+  const campaignPageRows = useMemo(() => {
+    const start = page * rowsPerPage
+    return campaignDisplayRows.slice(start, start + rowsPerPage)
+  }, [campaignDisplayRows, page, rowsPerPage])
+
+  const onSortCampaignColumn = useCallback((col: CampaignSortColumn) => {
+    setCampaignSort((prev) =>
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: col === 'created' || col === 'dispatched' ? 'desc' : 'asc' },
+    )
+  }, [])
+
+  const bulkDeleteCampaigns = useCallback(async () => {
+    setError(null)
+    const ids = campaignRowSelection.selectedIds
+    try {
+      for (const rawId of Array.from(ids)) {
+        const id = String(rawId ?? '').trim()
+        if (id) await deleteJobCampaign(id)
+      }
+      campaignRowSelection.clearSelection()
+      await Promise.all([loadCampaigns({ silent: true }), load({ silent: true })])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת קמפיינים')
+      throw err
+    }
+  }, [load, loadCampaigns, campaignRowSelection])
 
   const removeDetailJob = async () => {
     if (!detail) return
@@ -639,6 +790,7 @@ export default function JobsPage() {
                   <Tab value="unassigned" label={`פניות ללא ספקים (${counts.unassigned})`} />
                   <Tab value="search" label={`כל הפניות (${counts.search})`} />
                   <Tab value="leave" label="השארת פנייה" />
+                  <Tab value="campaigns" label={`קמפיינים (${counts.campaigns})`} />
                 </Tabs>
 
                 {tab === 'leave' ? null : (
@@ -696,7 +848,9 @@ export default function JobsPage() {
                     />
                     <Button
                       variant="contained"
-                      onClick={() => void load()}
+                      onClick={() =>
+                        void (tab === 'campaigns' ? loadCampaigns() : load())
+                      }
                       sx={{
                         backgroundColor: '#1565c0',
                         color: '#fff',
@@ -821,6 +975,186 @@ export default function JobsPage() {
                   </Button>
                 </Box>
               </Stack>
+            ) : tab === 'campaigns' ? (
+              campaignsLoading ? (
+                <Box
+                  sx={{
+                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                    py: 8,
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CircularProgress color="primary" />
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
+                  }}
+                >
+                  <Box sx={csPagedTableOuterBoxSx(theme)}>
+                    <CsTableContainer sx={csTableInnerPagedScrollSx}>
+                      <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
+                        <TableHead>
+                          <TableRow>
+                            <CsTableSelectAllHeaderCell
+                              pageRows={campaignPageRows}
+                              selectedIds={campaignRowSelection.selectedIds}
+                              onTogglePage={() =>
+                                campaignRowSelection.toggleAllOnPage(campaignPageRows)
+                              }
+                            />
+                            <TableCell sortDirection={campaignSort.col === 'id' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'id'}
+                                direction={campaignSort.col === 'id' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('id')}
+                              >
+                                מזהה
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'domain' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'domain'}
+                                direction={campaignSort.col === 'domain' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('domain')}
+                              >
+                                תחום
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'city' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'city'}
+                                direction={campaignSort.col === 'city' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('city')}
+                              >
+                                עיר
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'customerName' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'customerName'}
+                                direction={campaignSort.col === 'customerName' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('customerName')}
+                              >
+                                לקוח
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell>טלפון</TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'statusLabel' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'statusLabel'}
+                                direction={campaignSort.col === 'statusLabel' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('statusLabel')}
+                              >
+                                סטטוס
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'dispatched' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'dispatched'}
+                                direction={campaignSort.col === 'dispatched' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('dispatched')}
+                              >
+                                נשלחו
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'nextDripAt' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'nextDripAt'}
+                                direction={campaignSort.col === 'nextDripAt' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('nextDripAt')}
+                              >
+                                drip הבא
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'claimedByAccountName' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'claimedByAccountName'}
+                                direction={campaignSort.col === 'claimedByAccountName' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('claimedByAccountName')}
+                              >
+                                נלקח על ידי
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell>פנייה #</TableCell>
+                            <TableCell sortDirection={campaignSort.col === 'created' ? campaignSort.dir : false}>
+                              <TableSortLabel
+                                active={campaignSort.col === 'created'}
+                                direction={campaignSort.col === 'created' ? campaignSort.dir : 'asc'}
+                                onClick={() => onSortCampaignColumn('created')}
+                              >
+                                נוצר
+                              </TableSortLabel>
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {campaignPageRows.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  אין קמפיינים להצגה
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            campaignPageRows.map((c) => (
+                              <TableRow key={c.id} hover selected={campaignRowSelection.isSelected(c.id)}>
+                                <CsTableRowCheckboxCell
+                                  rowId={c.id}
+                                  selected={campaignRowSelection.isSelected(c.id)}
+                                  onToggle={campaignRowSelection.toggleRow}
+                                />
+                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                  {c.id.slice(0, 8)}…
+                                </TableCell>
+                                <TableCell>{c.domain || '—'}</TableCell>
+                                <TableCell>{c.city || '—'}</TableCell>
+                                <TableCell>{c.customerName || '—'}</TableCell>
+                                <TableCell dir="ltr" sx={{ textAlign: 'right' }}>
+                                  {formatCsPhoneDisplay(c.customerPhone) || '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    size="small"
+                                    label={c.statusLabel}
+                                    color={CAMPAIGN_STATUS_CHIP[c.status] ?? 'default'}
+                                    variant="outlined"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {c.dispatchedCount}/{c.candidateCount}
+                                </TableCell>
+                                <TableCell>{formatCsDateTime(c.nextDripAt)}</TableCell>
+                                <TableCell>{c.claimedByAccountName || '—'}</TableCell>
+                                <TableCell>{c.claimedJobId ?? '—'}</TableCell>
+                                <TableCell>{formatCsDateTime(c.created)}</TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CsTableContainer>
+                    <CsTablePaginationFooter
+                      rowsPerPageOptions={[10, 25, 50, 100]}
+                      count={campaignDisplayRows.length}
+                      rowsPerPage={rowsPerPage}
+                      page={page}
+                      onPageChange={(_e, next) => setPage(next)}
+                      onRowsPerPageChange={(e) => {
+                        setRowsPerPage(Number.parseInt(e.target.value, 10))
+                        setPage(0)
+                      }}
+                    />
+                  </Box>
+                </Box>
+              )
             ) : loading ? (
               <Box
                 sx={{
@@ -1003,7 +1337,7 @@ export default function JobsPage() {
                           <TableCell sx={{ maxWidth: 180 }} title={row.exclusionReason || ''}>
                             {row.exclusionReason || '—'}
                           </TableCell>
-                          <TableCell>{row.created}</TableCell>
+                          <TableCell>{formatCsDateTime(row.created)}</TableCell>
                           <TableCell align="center" onClick={(e) => e.stopPropagation()} sx={{ overflow: 'visible', textOverflow: 'clip' }}>
                             {tab === 'exceptions' ? (
                               <Stack
@@ -1133,7 +1467,7 @@ export default function JobsPage() {
               <Typography><strong>החרגות:</strong> {detail.exclusionReason || '—'}</Typography>
               <Typography><strong>תיאור:</strong> {detail.description}</Typography>
               <Typography variant="caption" color="text.secondary">
-                נוצר: {detail.created} · עודכן: {detail.updated}
+                נוצר: {formatCsDateTime(detail.created)} · עודכן: {formatCsDateTime(detail.updated)}
               </Typography>
             </Stack>
           ) : null}
@@ -1234,15 +1568,27 @@ export default function JobsPage() {
       </Dialog>
 
       <CsTableSelectionBar
-        open={rowSelection.selectedCount > 0}
-        selectedCount={rowSelection.selectedCount}
-        onClear={rowSelection.clearSelection}
+        open={tab === 'campaigns' ? campaignRowSelection.selectedCount > 0 : rowSelection.selectedCount > 0}
+        selectedCount={
+          tab === 'campaigns' ? campaignRowSelection.selectedCount : rowSelection.selectedCount
+        }
+        onClear={
+          tab === 'campaigns' ? campaignRowSelection.clearSelection : rowSelection.clearSelection
+        }
       >
-        <CsTableSelectionDeleteButton
-          selectedCount={rowSelection.selectedCount}
-          entityLabel="פניות"
-          onDelete={bulkDeleteSelected}
-        />
+        {tab === 'campaigns' ? (
+          <CsTableSelectionDeleteButton
+            selectedCount={campaignRowSelection.selectedCount}
+            entityLabel="קמפיינים"
+            onDelete={bulkDeleteCampaigns}
+          />
+        ) : (
+          <CsTableSelectionDeleteButton
+            selectedCount={rowSelection.selectedCount}
+            entityLabel="פניות"
+            onDelete={bulkDeleteSelected}
+          />
+        )}
       </CsTableSelectionBar>
     </>
   )

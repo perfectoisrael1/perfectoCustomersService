@@ -28,6 +28,7 @@ import { useTheme } from '@mui/material/styles'
 import {
   ACCOUNT_STATUS_CELL_BG,
   formatCsPhoneDisplay,
+  formatCsDateTime,
   isCreatedTodayJerusalem,
   mapAccountStatusLabel,
 } from '../lib/caliberUi'
@@ -621,7 +622,7 @@ export default function AccountsPage() {
                                 />
                               </TableCell>
                               <TableCell>{row.credits ?? '—'}</TableCell>
-                              <TableCell>{row.updatedAt}</TableCell>
+                              <TableCell>{formatCsDateTime(row.updatedAt)}</TableCell>
                             </TableRow>
                           )
                         })}

@@ -31,6 +31,27 @@ export type Job = {
   updated: string
 }
 
+export type JobCampaign = {
+  id: string
+  domain: string
+  city: string
+  customerName: string
+  customerPhone: string
+  description: string
+  status: string
+  statusLabel: string
+  candidateCount: number
+  dispatchedCount: number
+  initialBatchSize: number
+  dripIntervalSec: number
+  nextDripAt: string | null
+  claimedByAccountId: number | null
+  claimedByAccountName: string
+  claimedJobId: number | null
+  created: string
+  updated: string
+}
+
 export type Account = {
   id: number
   accountName: string
@@ -264,6 +285,16 @@ export async function meRequest(token: string) {
 
 export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
+}
+
+export async function getJobCampaigns() {
+  return csFetch<JobCampaign[]>('/customer-service/job-campaigns')
+}
+
+export async function deleteJobCampaign(id: string) {
+  return csFetch<void>(`/customer-service/job-campaigns/${encodeURIComponent(id.trim())}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function deleteJob(id: number) {
@@ -765,4 +796,56 @@ export async function deleteUserPayslip(
     token: payslipToken(token),
     body: { payslipUrl },
   })
+}
+
+export type Conversation = {
+  id: number
+  accountId: number
+  accountName: string | null
+  accountPhone: string | null
+  status: string
+  createdAt: string
+  updatedAt: string
+  lastMessageBody: string | null
+  lastMessageAt: string | null
+  unreadCount: number
+  unreadFromAccount: number
+}
+
+export type ConversationMessage = {
+  id: number
+  conversationId: number
+  senderType: string
+  senderId: number
+  messageBody: string | null
+  createdAt: string
+}
+
+export async function getConversations(query?: { status?: string }) {
+  const params = new URLSearchParams()
+  if (query?.status) params.set('status', query.status)
+  const qs = params.toString()
+  return csFetch<{ items: Conversation[] }>(
+    qs ? `/customer-service/conversations?${qs}` : '/customer-service/conversations',
+  )
+}
+
+export async function getConversationMessages(conversationId: number) {
+  return csFetch<{ status: string; items: ConversationMessage[] }>(
+    `/customer-service/conversations/${conversationId}/messages`,
+  )
+}
+
+export async function sendConversationAgentMessage(conversationId: number, messageBody: string) {
+  return csFetch<{ message: ConversationMessage }>(
+    `/customer-service/conversations/${conversationId}/messages`,
+    { method: 'POST', body: { messageBody } },
+  )
+}
+
+export async function closeConversation(conversationId: number) {
+  return csFetch<{ conversation: Conversation }>(
+    `/customer-service/conversations/${conversationId}/close`,
+    { method: 'POST' },
+  )
 }

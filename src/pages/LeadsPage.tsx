@@ -39,6 +39,7 @@ import {
   leadMatchesStatusView,
   type LeadStatusViewId,
 } from '../lib/leadsUi'
+import { formatCsDateTime } from '../lib/caliberUi'
 import { csDataTableSx, csPagedTableOuterBoxSx, csTableInnerPagedScrollSx } from '../lib/csTableUi'
 import CsTableContainer from '../components/CsStandardTable'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
@@ -741,13 +742,7 @@ export default function LeadsPage() {
                                 {row.details || '—'}
                               </TableCell>
                               <TableCell sx={{ direction: 'ltr', textAlign: 'right', color: 'text.secondary' }}>
-                                {row.created
-                                  ? new Date(row.created).toLocaleDateString('he-IL', {
-                                      day: '2-digit',
-                                      month: '2-digit',
-                                      year: '2-digit',
-                                    })
-                                  : '—'}
+                                {formatCsDateTime(row.created)}
                               </TableCell>
                               <TableCell title={row.responsible || ''}>{row.responsible || '—'}</TableCell>
                             </TableRow>

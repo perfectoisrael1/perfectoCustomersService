@@ -43,6 +43,7 @@ import {
   taskPriorityCellColors,
   taskProjectChipColors,
   taskStatusCellColors,
+  formatCsDateTime,
 } from '../lib/caliberUi'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
@@ -1256,7 +1257,7 @@ export default function TasksPage() {
                                 {row.execution_date ? String(row.execution_date).slice(0, 10) : '—'}
                               </TableCell>
                               <TableCell sx={{ direction: 'ltr', textAlign: 'right', color: 'text.secondary' }}>
-                                {row.created_at}
+                                {formatCsDateTime(row.created_at)}
                               </TableCell>
                             </TableRow>
                           )

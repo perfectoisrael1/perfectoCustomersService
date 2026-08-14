@@ -1,5 +1,12 @@
 /** ערכים ועיצובים מיושרים עם שירות הלקוחות של קליבר */
 
+import { formatDateInIsrael } from './israelTime'
+
+/** תאריך + שעה קריאים (Asia/Jerusalem) לתצוגה בטבלאות ודיאלוגים */
+export function formatCsDateTime(value: string | null | undefined): string {
+  return formatDateInIsrael(value)
+}
+
 export function formatCsPhoneDisplay(val: string | null | undefined): string {
   const s = String(val || '').trim()
   if (!s) return '—'

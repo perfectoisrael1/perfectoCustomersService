@@ -13,6 +13,7 @@ const JobsPage = lazy(() => import('./pages/JobsPage'))
 const AccountsPage = lazy(() => import('./pages/AccountsPage'))
 const LeadsPage = lazy(() => import('./pages/LeadsPage'))
 const TicketsPage = lazy(() => import('./pages/TicketsPage'))
+const ConversationsPage = lazy(() => import('./pages/ConversationsPage'))
 const TasksPage = lazy(() => import('./pages/TasksPage'))
 const DomainsPage = lazy(() => import('./pages/DomainsPage'))
 const CitiesPage = lazy(() => import('./pages/CitiesPage'))
@@ -110,6 +111,7 @@ export default function App() {
                 <Route path="/accounts/:segment" element={<AccountsPage />} />
                 <Route path="/leads" element={<LeadsPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
+                <Route path="/conversations" element={<ConversationsPage />} />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
                 <Route
                   path="/tasks/:tabSlug"

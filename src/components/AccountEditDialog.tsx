@@ -32,7 +32,7 @@ import {
   stringifyJsonStringArray,
   type AccountTabKey,
 } from '../lib/accountsUi'
-import { formatCsPhoneDisplay } from '../lib/caliberUi'
+import { formatCsPhoneDisplay, formatCsDateTime } from '../lib/caliberUi'
 import { STANDARD_TABLE_BODY_FONT_PX } from '../lib/leadsUi'
 
 type Props = {
@@ -180,6 +180,18 @@ export default function AccountEditDialog({
           slotProps={{ input: phoneInput }}
         />
       </Field>
+      <Field label="מייל">
+        <TextField
+          fullWidth
+          size="small"
+          type="email"
+          value={form.email || ''}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value || null }))}
+          sx={accountFieldInputSx}
+          slotProps={{ input: ltrInput }}
+          placeholder="name@example.com"
+        />
+      </Field>
       <Field label="סיסמה" required={isNew}>
         <TextField
           fullWidth
@@ -235,12 +247,12 @@ export default function AccountEditDialog({
       ) : null}
       <Field label="תאריך הצטרפות">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.secondary' }}>
-          {isNew ? '—' : existingAccount?.createdAt || '—'}
+          {isNew ? '—' : formatCsDateTime(existingAccount?.createdAt)}
         </Typography>
       </Field>
       <Field label="עודכן לאחרונה">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.secondary' }}>
-          {isNew ? '—' : existingAccount?.updatedAt || '—'}
+          {isNew ? '—' : formatCsDateTime(existingAccount?.updatedAt)}
         </Typography>
       </Field>
     </Box>

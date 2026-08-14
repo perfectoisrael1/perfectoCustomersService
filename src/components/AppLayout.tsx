@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react'
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -15,6 +15,7 @@ import {
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { useAuth } from '../context/useAuth'
+import { getConversations } from '../api/csApi'
 import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/headerLayout'
 import { isManagerRole } from '../lib/roles'
 
@@ -34,6 +35,7 @@ const mainLinks: NavLink[] = [
   { to: '/company-employees', prefix: '/company-employees', label: 'עובדי חברה' },
   { to: '/domains', prefix: '/domains', label: 'דומיינים' },
   { to: '/notifications', prefix: '/notifications', label: 'התראות' },
+  { to: '/conversations?tab=open', prefix: '/conversations', label: 'שיחות' },
 ]
 
 const bottomLinks: NavLink[] = [
@@ -66,15 +68,18 @@ function NavList({
   items,
   pathname,
   onNavigate,
+  openConversationsCount = 0,
 }: {
   items: NavLink[]
   pathname: string
   onNavigate: () => void
+  openConversationsCount?: number
 }) {
   return (
     <List disablePadding>
       {items.map((l) => {
         const selected = pathname === l.prefix || pathname.startsWith(`${l.prefix}/`)
+        const showOpenCount = l.prefix === '/conversations' && openConversationsCount > 0
         return (
           <ListItemButton
             key={l.prefix}
@@ -93,8 +98,30 @@ function NavList({
             }}
           >
             <ListItemText
-              primary={l.label}
-              slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right' } } }}
+              primary={
+                showOpenCount ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      gap: 1,
+                    }}
+                  >
+                    <Box component="span" sx={{ fontWeight: 600 }}>
+                      {l.label}
+                    </Box>
+                    <Box component="span" sx={{ color: 'error.main', fontWeight: 800, flexShrink: 0 }}>
+                      {openConversationsCount}
+                    </Box>
+                  </Box>
+                ) : (
+                  l.label
+                )
+              }
+              slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right', width: '100%' } } }}
+              sx={{ width: '100%', m: 0 }}
             />
           </ListItemButton>
         )
@@ -106,9 +133,35 @@ function NavList({
 export default function AppLayout() {
   const appBarRef = useRef<HTMLDivElement>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [openConversationsCount, setOpenConversationsCount] = useState(0)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+
+  useEffect(() => {
+    if (!user) {
+      setOpenConversationsCount(0)
+      return
+    }
+
+    let cancelled = false
+
+    const loadOpenCount = async () => {
+      try {
+        const { items } = await getConversations({ status: 'open' })
+        if (!cancelled) setOpenConversationsCount(items?.length ?? 0)
+      } catch {
+        if (!cancelled) setOpenConversationsCount(0)
+      }
+    }
+
+    void loadOpenCount()
+    const intervalId = setInterval(loadOpenCount, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
+  }, [user, location.pathname])
 
   const isManager = isManagerRole(user?.role)
   const visibleMainLinks = useMemo(() => filterNavLinks(mainLinks, isManager), [isManager])
@@ -169,7 +222,12 @@ export default function AppLayout() {
       </Toolbar>
       <Divider />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <NavList items={visibleMainLinks} pathname={location.pathname} onNavigate={closeMobileDrawer} />
+        <NavList
+          items={visibleMainLinks}
+          pathname={location.pathname}
+          onNavigate={closeMobileDrawer}
+          openConversationsCount={openConversationsCount}
+        />
       </Box>
       <Divider />
       <Box sx={{ flexShrink: 0, mt: 'auto' }}>
