@@ -287,6 +287,11 @@ export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
 }
 
+export async function getJobsForAccount(accountId: number) {
+  const params = new URLSearchParams({ accountId: String(accountId) })
+  return csFetch<Job[]>(`/customer-service/jobs?${params.toString()}`)
+}
+
 export async function getJobCampaigns() {
   return csFetch<JobCampaign[]>('/customer-service/job-campaigns')
 }

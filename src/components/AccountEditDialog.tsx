@@ -3,6 +3,8 @@ import {
   Autocomplete,
   Box,
   Button,
+  Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -13,12 +15,19 @@ import {
   Stack,
   Switch,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
   TextField,
   Typography,
 } from '@mui/material'
-import type { Account, City, Service } from '../api/csApi'
+import type { Account, City, Job, Service } from '../api/csApi'
 import type { AccountInput } from '../api/csApi'
+import { getJobsForAccount } from '../api/csApi'
 import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
 import {
   ACCOUNTS_DIALOG_ACCENT,
@@ -32,7 +41,7 @@ import {
   stringifyJsonStringArray,
   type AccountTabKey,
 } from '../lib/accountsUi'
-import { formatCsPhoneDisplay, formatCsDateTime } from '../lib/caliberUi'
+import { formatCsPhoneDisplay, formatCsDateTime, jobStatusChipColors } from '../lib/caliberUi'
 import { STANDARD_TABLE_BODY_FONT_PX } from '../lib/leadsUi'
 
 type Props = {
@@ -121,12 +130,43 @@ export default function AccountEditDialog({
   onDelete,
 }: Props) {
   const [tab, setTab] = useState<AccountTabKey>('phone')
+  const [linkedJobs, setLinkedJobs] = useState<Job[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsError, setJobsError] = useState<string | null>(null)
   const isNew = account === 'new'
   const existingAccount: Account | null = account !== 'new' && account ? account : null
 
   useEffect(() => {
     if (open) setTab('phone')
   }, [open, existingAccount?.id])
+
+  useEffect(() => {
+    if (!open || tab !== 'jobs' || !existingAccount?.id) {
+      return
+    }
+
+    let cancelled = false
+    setJobsLoading(true)
+    setJobsError(null)
+
+    void getJobsForAccount(existingAccount.id)
+      .then((rows) => {
+        if (!cancelled) setLinkedJobs(rows)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setLinkedJobs([])
+          setJobsError(e instanceof Error ? e.message : 'טעינת הפניות נכשלה')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setJobsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, tab, existingAccount?.id])
 
   const title = isNew
     ? 'ספק חדש'
@@ -425,12 +465,104 @@ export default function AccountEditDialog({
     </Box>
   )
 
+  const renderJobsTab = () => {
+    if (isNew) {
+      return (
+        <Typography sx={{ color: 'text.secondary', fontSize: 14, textAlign: 'center', py: 4 }}>
+          שמור את הספק כדי לצפות בפניות המקושרות אליו.
+        </Typography>
+      )
+    }
+
+    if (jobsLoading) {
+      return (
+        <Stack sx={{ alignItems: 'center', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={32} />
+        </Stack>
+      )
+    }
+
+    if (jobsError) {
+      return (
+        <Typography sx={{ color: 'error.main', fontSize: 14, textAlign: 'center', py: 4 }}>
+          {jobsError}
+        </Typography>
+      )
+    }
+
+    if (linkedJobs.length === 0) {
+      return (
+        <Typography sx={{ color: 'text.secondary', fontSize: 14, textAlign: 'center', py: 4 }}>
+          אין פניות המקושרות לספק זה.
+        </Typography>
+      )
+    }
+
+    return (
+      <TableContainer sx={{ maxHeight: 420 }}>
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>לקוח</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>טלפון</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>תיאור</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>תחום</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>עיר</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>סטטוס</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>נוצר</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {linkedJobs.map((row) => {
+              const statusColors = jobStatusChipColors(row.statusLabel)
+              const customerLabel =
+                String(row.customerName || '').trim() || row.accountName || '—'
+              const phone = row.customerPhone || row.phoneNumber
+
+              return (
+                <TableRow key={row.id} hover>
+                  <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>{row.id}</TableCell>
+                  <TableCell title={customerLabel}>{customerLabel}</TableCell>
+                  <TableCell sx={{ direction: 'ltr', textAlign: 'right' }}>
+                    {formatCsPhoneDisplay(phone) || '—'}
+                  </TableCell>
+                  <TableCell sx={{ maxWidth: 220 }} title={row.description}>
+                    {row.description || '—'}
+                  </TableCell>
+                  <TableCell>{row.leadDomain || row.specialtiesCategory || '—'}</TableCell>
+                  <TableCell>{row.city || '—'}</TableCell>
+                  <TableCell sx={{ overflow: 'visible', textOverflow: 'clip' }}>
+                    <Chip
+                      size="small"
+                      label={row.statusLabel || '—'}
+                      sx={{
+                        bgcolor: statusColors.bg,
+                        color: statusColors.fg,
+                        fontWeight: 700,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    {formatCsDateTime(row.created)}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    )
+  }
+
   const tabContent =
     tab === 'phone'
       ? renderPhoneTab()
       : tab === 'domains'
         ? renderDomainsTab()
-        : renderStatusTab()
+        : tab === 'jobs'
+          ? renderJobsTab()
+          : renderStatusTab()
 
   return (
     <Dialog
