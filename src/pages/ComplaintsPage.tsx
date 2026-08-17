@@ -12,7 +12,6 @@ import {
   DialogContent,
   IconButton,
   InputAdornment,
-  Link,
   Stack,
   Table,
   TableBody,
@@ -48,6 +47,7 @@ import {
   deleteComplaint,
   getAccounts,
   getComplaints,
+  getComplaintViewUrl,
   patchComplaint,
   uploadComplaintFile,
   uploadComplaintRecording,
@@ -109,6 +109,7 @@ export default function ComplaintsPage() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingRecording, setPendingRecording] = useState<File | null>(null)
+  const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recordingInputRef = useRef<HTMLInputElement>(null)
 
@@ -291,6 +292,23 @@ export default function ComplaintsPage() {
     }
   }, [load, rowSelection])
 
+  const openComplaintAttachment = useCallback(
+    async (complaintId: number, kind: 'file' | 'recording') => {
+      const key = `${complaintId}:${kind}`
+      setOpeningAttachment(key)
+      setError(null)
+      try {
+        const { url } = await getComplaintViewUrl(complaintId, kind)
+        window.open(url, '_blank', 'noopener,noreferrer')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'שגיאה בפתיחת הקובץ')
+      } finally {
+        setOpeningAttachment((prev) => (prev === key ? null : prev))
+      }
+    },
+    [],
+  )
+
   const sortHeader = (col: ComplaintsSortColumn, label: string) => (
     <TableCell key={col}>
       <TableSortLabel
@@ -416,18 +434,28 @@ export default function ComplaintsPage() {
                               </TableCell>
                               <TableCell onClick={(e) => e.stopPropagation()}>
                                 {row.fileUrl ? (
-                                  <Link href={row.fileUrl} target="_blank" rel="noopener noreferrer">
-                                    צפייה
-                                  </Link>
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    disabled={openingAttachment === `${row.complaintId}:file`}
+                                    onClick={() => void openComplaintAttachment(row.complaintId, 'file')}
+                                  >
+                                    {openingAttachment === `${row.complaintId}:file` ? '…' : 'צפייה'}
+                                  </Button>
                                 ) : (
                                   '—'
                                 )}
                               </TableCell>
                               <TableCell onClick={(e) => e.stopPropagation()}>
                                 {row.recordingUrl ? (
-                                  <Link href={row.recordingUrl} target="_blank" rel="noopener noreferrer">
-                                    האזנה
-                                  </Link>
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    disabled={openingAttachment === `${row.complaintId}:recording`}
+                                    onClick={() => void openComplaintAttachment(row.complaintId, 'recording')}
+                                  >
+                                    {openingAttachment === `${row.complaintId}:recording` ? '…' : 'האזנה'}
+                                  </Button>
                                 ) : (
                                   '—'
                                 )}

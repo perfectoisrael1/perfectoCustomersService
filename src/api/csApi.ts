@@ -650,6 +650,17 @@ export async function deleteComplaint(id: number) {
   return csFetch<void>(`/customer-service/complaints/${id}`, { method: 'DELETE' })
 }
 
+export async function getComplaintViewUrl(
+  complaintId: number,
+  kind: 'file' | 'recording',
+): Promise<{ url: string }> {
+  const path =
+    kind === 'file'
+      ? `/customer-service/complaints/${complaintId}/view-file`
+      : `/customer-service/complaints/${complaintId}/view-recording`
+  return csFetch<{ url: string }>(path)
+}
+
 export async function uploadComplaintFile(
   complaintId: number,
   file: File,
