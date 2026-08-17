@@ -22,6 +22,7 @@ const CompanyEmployeesPage = lazy(() => import('./pages/CompanyEmployeesPage'))
 const DashboardsPage = lazy(() => import('./pages/DashboardsPage'))
 const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'))
 
 function PageLoadFallback() {
   return (
@@ -112,6 +113,7 @@ export default function App() {
                 <Route path="/leads" element={<LeadsPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/conversations" element={<ConversationsPage />} />
+                <Route path="/complaints" element={<ComplaintsPage />} />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
                 <Route
                   path="/tasks/:tabSlug"

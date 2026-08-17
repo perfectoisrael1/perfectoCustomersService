@@ -36,6 +36,7 @@ const mainLinks: NavLink[] = [
   { to: '/domains', prefix: '/domains', label: 'דומיינים' },
   { to: '/notifications', prefix: '/notifications', label: 'התראות' },
   { to: '/conversations?tab=open', prefix: '/conversations', label: 'שיחות' },
+  { to: '/complaints', prefix: '/complaints', label: 'תלונות' },
 ]
 
 const bottomLinks: NavLink[] = [

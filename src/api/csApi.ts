@@ -154,6 +154,17 @@ export type Domain = {
   projectEnded: boolean | null
 }
 
+export type Complaint = {
+  complaintId: number
+  accountId: number
+  accountName: string | null
+  phoneNumber: string | null
+  notes: string | null
+  fileUrl: string | null
+  recordingUrl: string | null
+  createdAt: string
+}
+
 export type City = {
   id: number
   region: string
@@ -613,6 +624,82 @@ export async function deleteDomain(id: number) {
   return csFetch<{ ok: boolean; id: number }>(`/customer-service/domains/${id}`, {
     method: 'DELETE',
   })
+}
+
+export async function getComplaints() {
+  return csFetch<Complaint[]>('/customer-service/complaints')
+}
+
+export type ComplaintInput = {
+  accountId: number
+  notes?: string | null
+}
+
+export async function createComplaint(body: ComplaintInput) {
+  return csFetch<Complaint>('/customer-service/complaints', { method: 'POST', body })
+}
+
+export async function patchComplaint(
+  id: number,
+  body: Partial<ComplaintInput & { fileUrl?: string | null; recordingUrl?: string | null }>,
+) {
+  return csFetch<Complaint>(`/customer-service/complaints/${id}`, { method: 'PATCH', body })
+}
+
+export async function deleteComplaint(id: number) {
+  return csFetch<void>(`/customer-service/complaints/${id}`, { method: 'DELETE' })
+}
+
+export async function uploadComplaintFile(
+  complaintId: number,
+  file: File,
+): Promise<{ url: string }> {
+  const token = getStoredToken()
+  const fd = new FormData()
+  fd.append('file', file)
+  const absolute = `${baseUrl()}/customer-service/complaints/${complaintId}/upload-file`
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(absolute, {
+    method: 'POST',
+    headers,
+    body: fd,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  return (await res.json()) as { url: string }
+}
+
+export async function uploadComplaintRecording(
+  complaintId: number,
+  file: File,
+): Promise<{ url: string }> {
+  const token = getStoredToken()
+  const fd = new FormData()
+  fd.append('recording', file)
+  const absolute = `${baseUrl()}/customer-service/complaints/${complaintId}/upload-recording`
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(absolute, {
+    method: 'POST',
+    headers,
+    body: fd,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  return (await res.json()) as { url: string }
 }
 
 /**
