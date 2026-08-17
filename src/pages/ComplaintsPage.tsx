@@ -31,6 +31,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import CsTableContainer from '../components/CsStandardTable'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
+import AccountEditDialog from '../components/AccountEditDialog'
 import {
   CsTableRowCheckboxCell,
   CsTableSelectAllHeaderCell,
@@ -44,21 +45,26 @@ import { CS_PAGE_FILL_MIN_HEIGHT_CSS } from '../layout/headerLayout'
 import { formatCsPhoneDisplay } from '../lib/caliberUi'
 import {
   createComplaint,
+  deleteAccount,
   deleteComplaint,
   getAccounts,
+  getCities,
   getComplaints,
-  getComplaintViewUrl,
+  openComplaintAttachmentView,
+  getServices,
+  patchAccount,
   patchComplaint,
   uploadComplaintFile,
   uploadComplaintRecording,
   type Account,
+  type AccountInput,
+  type City,
   type Complaint,
   type ComplaintInput,
+  type Service,
 } from '../api/csApi'
 
 type ComplaintsSortColumn =
-  | 'complaintId'
-  | 'accountId'
   | 'accountName'
   | 'phoneNumber'
   | 'notes'
@@ -66,10 +72,6 @@ type ComplaintsSortColumn =
 
 function complaintSortValue(row: Complaint, col: ComplaintsSortColumn): string {
   switch (col) {
-    case 'complaintId':
-      return String(row.complaintId)
-    case 'accountId':
-      return String(row.accountId)
     case 'accountName':
       return String(row.accountName ?? '')
     case 'phoneNumber':
@@ -96,6 +98,48 @@ function accountLabel(a: Account): string {
   return name ? `${name} (${phone})` : phone || `#${a.id}`
 }
 
+const accountNameClickableSx = {
+  color: 'primary.main',
+  fontWeight: 600,
+  cursor: 'pointer',
+  textDecoration: 'underline',
+  '&:hover': { opacity: 0.85 },
+} as const
+
+function buildAccountFormFromRow(row: Account): AccountInput {
+  return {
+    accountName: row.accountName,
+    phoneNumber: row.phoneNumber,
+    businessName: row.businessName,
+    email: row.email,
+    about: row.about,
+    certificateNumber: row.certificateNumber,
+    specialtiesCategory: row.specialtiesCategory,
+    specialties: row.specialties,
+    workingAreas: row.workingAreas,
+    workingHours:
+      row.workingHours == null
+        ? null
+        : typeof row.workingHours === 'string'
+          ? row.workingHours
+          : JSON.stringify(row.workingHours),
+    perfectoStatus: row.perfectoStatus,
+    availability:
+      row.availability == null || row.availability === ''
+        ? null
+        : Number.parseInt(String(row.availability), 10),
+    credits: row.credits,
+    payPerLead: row.payPerLead,
+    membershipPaid: row.membershipPaid === true,
+    yearsOfExperience:
+      row.yearsOfExperience == null || row.yearsOfExperience === ''
+        ? null
+        : Number.parseInt(String(row.yearsOfExperience), 10),
+    slug: row.slug,
+    password: row.password?.trim() && row.password !== '—' ? row.password : '',
+  }
+}
+
 export default function ComplaintsPage() {
   const theme = useTheme()
   const [rows, setRows] = useState<Complaint[]>([])
@@ -110,11 +154,16 @@ export default function ComplaintsPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingRecording, setPendingRecording] = useState<File | null>(null)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
+  const [accountEditor, setAccountEditor] = useState<Account | null>(null)
+  const [accountForm, setAccountForm] = useState<AccountInput>({})
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [catalogServices, setCatalogServices] = useState<Service[]>([])
+  const [catalogCities, setCatalogCities] = useState<City[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recordingInputRef = useRef<HTMLInputElement>(null)
 
   const [sort, setSort] = useState<{ col: ComplaintsSortColumn; dir: 'asc' | 'desc' }>({
-    col: 'complaintId',
+    col: 'createdAt',
     dir: 'desc',
   })
   const [page, setPage] = useState(0)
@@ -138,6 +187,26 @@ export default function ComplaintsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [svc, cty] = await Promise.all([getServices(), getCities()])
+        if (cancelled) return
+        setCatalogServices(Array.isArray(svc) ? svc : [])
+        setCatalogCities(Array.isArray(cty) ? cty : [])
+      } catch {
+        if (!cancelled) {
+          setCatalogServices([])
+          setCatalogCities([])
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -292,14 +361,58 @@ export default function ComplaintsPage() {
     }
   }, [load, rowSelection])
 
+  const openAccountEdit = useCallback(
+    (accountId: number) => {
+      const account = accounts.find((a) => a.id === accountId)
+      if (!account) return
+      setAccountForm(buildAccountFormFromRow(account))
+      setAccountEditor(account)
+    },
+    [accounts],
+  )
+
+  const handleAccountSave = async () => {
+    if (!accountEditor) return
+    setAccountSaving(true)
+    setError(null)
+    try {
+      await patchAccount(accountEditor.id, accountForm)
+      setAccountEditor(null)
+      const accountList = await getAccounts()
+      setAccounts(Array.isArray(accountList) ? accountList : [])
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בשמירת הספק')
+    } finally {
+      setAccountSaving(false)
+    }
+  }
+
+  const handleAccountDelete = async () => {
+    if (!accountEditor) return
+    if (!window.confirm('האם אתה בטוח?')) return
+    setAccountSaving(true)
+    setError(null)
+    try {
+      await deleteAccount(accountEditor.id)
+      setAccountEditor(null)
+      const accountList = await getAccounts()
+      setAccounts(Array.isArray(accountList) ? accountList : [])
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה במחיקת הספק')
+    } finally {
+      setAccountSaving(false)
+    }
+  }
+
   const openComplaintAttachment = useCallback(
     async (complaintId: number, kind: 'file' | 'recording') => {
       const key = `${complaintId}:${kind}`
       setOpeningAttachment(key)
       setError(null)
       try {
-        const { url } = await getComplaintViewUrl(complaintId, kind)
-        window.open(url, '_blank', 'noopener,noreferrer')
+        await openComplaintAttachmentView(complaintId, kind)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'שגיאה בפתיחת הקובץ')
       } finally {
@@ -394,8 +507,6 @@ export default function ComplaintsPage() {
                             selectedIds={rowSelection.selectedIds}
                             onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
                           />
-                          {sortHeader('complaintId', '#')}
-                          {sortHeader('accountId', 'מס׳ לקוח')}
                           {sortHeader('accountName', 'שם לקוח')}
                           {sortHeader('phoneNumber', 'טלפון')}
                           {sortHeader('notes', 'הערות')}
@@ -407,7 +518,7 @@ export default function ComplaintsPage() {
                       <TableBody>
                         {pageRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                            <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                               אין תלונות
                             </TableCell>
                           </TableRow>
@@ -425,9 +536,34 @@ export default function ComplaintsPage() {
                                 selected={rowSelection.isSelected(row.complaintId)}
                                 onToggle={rowSelection.toggleRow}
                               />
-                              <TableCell>{row.complaintId}</TableCell>
-                              <TableCell>{row.accountId}</TableCell>
-                              <TableCell>{row.accountName || '—'}</TableCell>
+                              <TableCell
+                                onClick={(e) => {
+                                  if (!row.accountName?.trim() || !row.accountId) return
+                                  e.stopPropagation()
+                                  openAccountEdit(row.accountId)
+                                }}
+                              >
+                                {row.accountName?.trim() ? (
+                                  <Typography
+                                    component="span"
+                                    role="button"
+                                    tabIndex={0}
+                                    title={row.accountName}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        openAccountEdit(row.accountId)
+                                      }
+                                    }}
+                                    sx={accountNameClickableSx}
+                                  >
+                                    {row.accountName}
+                                  </Typography>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
                               <TableCell>{formatCsPhoneDisplay(row.phoneNumber) || '—'}</TableCell>
                               <TableCell sx={{ maxWidth: 280, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {row.notes || '—'}
@@ -587,6 +723,19 @@ export default function ComplaintsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AccountEditDialog
+        open={accountEditor !== null}
+        account={accountEditor}
+        form={accountForm}
+        setForm={setAccountForm}
+        saving={accountSaving}
+        services={catalogServices}
+        cities={catalogCities}
+        onClose={() => !accountSaving && setAccountEditor(null)}
+        onSave={() => void handleAccountSave()}
+        onDelete={() => void handleAccountDelete()}
+      />
 
       <CsTableSelectionBar
         open={rowSelection.selectedCount > 0}

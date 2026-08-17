@@ -650,15 +650,34 @@ export async function deleteComplaint(id: number) {
   return csFetch<void>(`/customer-service/complaints/${id}`, { method: 'DELETE' })
 }
 
-export async function getComplaintViewUrl(
+export async function openComplaintAttachmentView(
   complaintId: number,
   kind: 'file' | 'recording',
-): Promise<{ url: string }> {
+): Promise<void> {
+  const token = getStoredToken()
   const path =
     kind === 'file'
       ? `/customer-service/complaints/${complaintId}/view-file`
       : `/customer-service/complaints/${complaintId}/view-recording`
-  return csFetch<{ url: string }>(path)
+  const absolute = `${baseUrl()}${path}`
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(absolute, {
+    method: 'GET',
+    headers,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  window.open(objectUrl, '_blank', 'noopener,noreferrer')
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
 }
 
 export async function uploadComplaintFile(
