@@ -23,6 +23,7 @@ const DashboardsPage = lazy(() => import('./pages/DashboardsPage'))
 const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'))
+const AccountDeletionRequestPage = lazy(() => import('./pages/AccountDeletionRequestPage'))
 
 function PageLoadFallback() {
   return (
@@ -91,6 +92,7 @@ export default function App() {
           <Suspense fallback={<PageLoadFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/delete-account" element={<AccountDeletionRequestPage />} />
               <Route
                 element={(
                   <ProtectedRoute>

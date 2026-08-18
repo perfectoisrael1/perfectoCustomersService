@@ -10,6 +10,7 @@ export const PERFECTO_STATUS_OPTIONS = [
   { value: 'inactive', label: 'לא פעיל' },
   { value: 'suspended', label: 'בהשעיה' },
   { value: 'pending', label: 'ממתין' },
+  { value: 'delete_requested', label: 'מעוניין למחוק חשבון' },
 ] as const
 
 export const AVAILABILITY_OPTIONS = [
@@ -39,6 +40,7 @@ export function accountStatusChipColors(raw: string | null | undefined): { bg: s
     'לא פעיל': '#1565C0',
     בהשעיה: '#BF360C',
     ממתין: '#827717',
+    'מעוניין למחוק חשבון': '#B71C1C',
   }
   return { bg, fg: fgMap[label] || '#263238' }
 }

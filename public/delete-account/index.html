@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>מעביר…</title>
+    <script>
+      try {
+        var p = location.pathname || ''
+        if (p.endsWith('/') && p.length > 1) p = p.slice(0, -1)
+        if (p && p.startsWith('/') && !p.startsWith('//') && p.indexOf('..') === -1) {
+          sessionStorage.setItem('perfectoSpaRedirect', p)
+        }
+      } catch (e) {}
+      location.replace('/')
+    </script>
+  </head>
+  <body></body>
+</html>
