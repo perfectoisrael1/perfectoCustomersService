@@ -14,10 +14,31 @@ export const PERFECTO_STATUS_OPTIONS = [
 ] as const
 
 export const AVAILABILITY_OPTIONS = [
-  { value: '1', label: 'זמין' },
+  { value: '3', label: 'זמין' },
   { value: '0', label: 'לא זמין (לא בשעות העבודה)' },
-  { value: '2', label: 'לא זמין (כיבוי ידני באפליקציה)' },
+  { value: '2', label: 'לא זמין (כיבוי ידני)' },
 ] as const
+
+/** 1 = זמין לפי שעות, 3 = הפעלה ידנית (גם משירות לקוחות) */
+export function availabilitySelectValue(raw: number | null | undefined): string {
+  if (raw == null || !Number.isFinite(Number(raw))) return ''
+  const n = Number(raw)
+  if (n === 1 || n === 3) return '3'
+  return String(n)
+}
+
+const SYNCABLE_PERFECTO_STATUSES = new Set(['active', 'unactive', 'inactive', ''])
+
+export function perfectoStatusForAvailability(
+  availability: number | null,
+  currentStatus: string | null | undefined,
+): string | null {
+  const cur = String(currentStatus || '').trim().toLowerCase()
+  if (!SYNCABLE_PERFECTO_STATUSES.has(cur)) return currentStatus ?? null
+  if (availability === 1 || availability === 3) return 'active'
+  if (availability === 0 || availability === 2) return 'unactive'
+  return currentStatus ?? null
+}
 
 export function accountStatusOptionsForForm(raw: string | null | undefined) {
   const cur = String(raw || '').trim().toLowerCase()
@@ -154,7 +175,11 @@ export function formatAccountStatusAvailabilityDisplay(
   account: Pick<AccountSupplierDisplayFields, 'perfectoStatus' | 'accountStatus' | 'availability'>,
 ): string {
   const status = mapAccountStatusLabel(account.perfectoStatus || account.accountStatus)
-  const avKey = String(account.availability ?? '').trim()
+  const avKey = availabilitySelectValue(
+    account.availability == null || account.availability === ''
+      ? null
+      : Number(account.availability),
+  )
   const av = AVAILABILITY_OPTIONS.find((o) => o.value === avKey)
   const avLabel = av?.label ?? (avKey || '—')
   return `${status} · ${avLabel}`

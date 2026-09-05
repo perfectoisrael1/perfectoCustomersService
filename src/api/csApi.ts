@@ -95,6 +95,7 @@ export type Lead = {
   followUpDate: string | null
   details: string | null
   status: string | null
+  voiceBotStatus: string | null
   leadSource: string | null
   timeToCall: string | null
   linkId: string | null
@@ -506,6 +507,7 @@ export type LeadInput = Partial<{
   followUpDate: string | null
   details: string | null
   status: string | null
+  voiceBotStatus: string | null
   leadSource: string | null
   timeToCall: string | null
   linkId: string | null

@@ -76,6 +76,7 @@ type LeadsSortColumn =
   | 'city'
   | 'followUpDate'
   | 'status'
+  | 'voiceBotStatus'
   | 'leadType'
   | 'details'
   | 'created'
@@ -95,6 +96,8 @@ function leadSortValue(row: Lead, col: LeadsSortColumn): string {
       return row.followUpDate ? String(row.followUpDate).slice(0, 19) : ''
     case 'status':
       return String(row.status ?? '')
+    case 'voiceBotStatus':
+      return String(row.voiceBotStatus ?? '')
     case 'leadType':
       return String(row.leadType ?? '')
     case 'details':
@@ -213,7 +216,18 @@ export default function LeadsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return tabRows
     return tabRows.filter((r) => {
-      const blob = [r.name, r.phone, r.businessName, r.status, r.responsible, r.category, r.city, r.details, r.leadType]
+      const blob = [
+        r.name,
+        r.phone,
+        r.businessName,
+        r.status,
+        r.voiceBotStatus,
+        r.responsible,
+        r.category,
+        r.city,
+        r.details,
+        r.leadType,
+      ]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
       const qd = q.replace(/\D/g, '')
@@ -336,7 +350,7 @@ export default function LeadsPage() {
     }
   }, [loadAll, rowSelection])
 
-  const colSpan = 11
+  const colSpan = 12
 
   return (
     <>
@@ -588,6 +602,18 @@ export default function LeadsPage() {
                               סטטוס
                             </TableSortLabel>
                           </TableCell>
+                          <TableCell
+                            align="center"
+                            sortDirection={sort.col === 'voiceBotStatus' ? sort.dir : false}
+                          >
+                            <TableSortLabel
+                              active={sort.col === 'voiceBotStatus'}
+                              direction={sort.col === 'voiceBotStatus' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('voiceBotStatus')}
+                            >
+                              סטטוס בוט קולי
+                            </TableSortLabel>
+                          </TableCell>
                           <TableCell align="center" sortDirection={sort.col === 'leadType' ? sort.dir : false}>
                             <TableSortLabel
                               active={sort.col === 'leadType'}
@@ -675,6 +701,9 @@ export default function LeadsPage() {
                                     fontWeight: 700,
                                   }}
                                 />
+                              </TableCell>
+                              <TableCell align="center" title={row.voiceBotStatus || ''}>
+                                {row.voiceBotStatus || '—'}
                               </TableCell>
                               <TableCell
                                 align="center"

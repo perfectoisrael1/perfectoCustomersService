@@ -34,6 +34,8 @@ import {
   ACCOUNT_EDIT_TABS,
   ACCOUNT_PHONE_EMPHASIS,
   AVAILABILITY_OPTIONS,
+  availabilitySelectValue,
+  perfectoStatusForAvailability,
   accountFieldInputSx,
   accountStatusChipColors,
   accountStatusOptionsForForm,
@@ -417,12 +419,14 @@ export default function AccountEditDialog({
         <Select
           size="small"
           fullWidth
-          value={form.availability == null ? '' : String(form.availability)}
+          value={availabilitySelectValue(form.availability)}
           onChange={(e) => {
             const v = e.target.value
+            const availability = v === '' ? null : Number.parseInt(String(v), 10)
             setForm((f) => ({
               ...f,
-              availability: v === '' ? null : Number.parseInt(v, 10),
+              availability,
+              perfectoStatus: perfectoStatusForAvailability(availability, f.perfectoStatus),
             }))
           }}
           displayEmpty
@@ -437,6 +441,9 @@ export default function AccountEditDialog({
             </MenuItem>
           ))}
         </Select>
+        <Typography sx={{ mt: 1, fontSize: 12, color: 'text.secondary', lineHeight: 1.45 }}>
+          בחירה ב«זמין» / «לא זמין (כיבוי ידני)» נשמרת ולא נדרסת אוטומטית משעות העבודה.
+        </Typography>
       </Field>
       {!isNew ? (
         <Field label="דמי הקמה">
