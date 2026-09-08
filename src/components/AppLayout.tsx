@@ -28,6 +28,7 @@ const mainLinks: NavLink[] = [
   { to: '/jobs/today', prefix: '/jobs', label: 'פניות מלקוחות' },
   { to: '/accounts/businesses', prefix: '/accounts', label: 'ספקים' },
   { to: '/leads', prefix: '/leads', label: 'לידים' },
+  { to: '/payment-attempts', prefix: '/payment-attempts', label: 'תשלומים' },
   { to: '/tickets', prefix: '/tickets', label: 'שירות ספקים' },
   { to: '/tasks/my-tasks', prefix: '/tasks', label: 'משימות' },
   { to: '/cities', prefix: '/cities', label: 'ספקים וערים' },

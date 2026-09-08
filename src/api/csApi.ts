@@ -817,9 +817,17 @@ export async function patchCategoryPromotion(category: string, promotion: boolea
 export type PaymentLinkRow = {
   id: number
   accountId: number
+  accountName?: string | null
+  phoneNumber?: string | null
   amount: number
   status: string
   purpose: string | null
+  packageKey?: string | null
+  linkId?: string | null
+  documentId?: string | null
+  paymentMethod?: 'bit' | 'credit' | null
+  errorCode?: string | null
+  errorLabel?: string | null
   created: string
   updated: string
 }

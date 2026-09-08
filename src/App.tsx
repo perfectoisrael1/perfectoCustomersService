@@ -23,6 +23,7 @@ const DashboardsPage = lazy(() => import('./pages/DashboardsPage'))
 const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'))
+const PaymentAttemptsPage = lazy(() => import('./pages/PaymentAttemptsPage'))
 const AccountDeletionRequestPage = lazy(() => import('./pages/AccountDeletionRequestPage'))
 
 function PageLoadFallback() {
@@ -113,6 +114,7 @@ export default function App() {
                 <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
                 <Route path="/accounts/:segment" element={<AccountsPage />} />
                 <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/payment-attempts" element={<PaymentAttemptsPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/conversations" element={<ConversationsPage />} />
                 <Route path="/complaints" element={<ComplaintsPage />} />
