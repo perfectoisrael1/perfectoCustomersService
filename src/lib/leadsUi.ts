@@ -21,6 +21,7 @@ export const LEADS_STATUS_OPTIONS: readonly string[] = [
   'אין מענה',
   'חדש',
   'לא מעוניין',
+  'לא מהתחום',
   'שילם בהעברה',
   'שילם',
   'אמ 3',
@@ -34,6 +35,7 @@ const STATUS_COLOR_ENTRIES: [string, { bg: string; fg: string }][] = [
   ['אין מענה', { bg: '#90A4AE', fg: '#fff' }],
   ['חדש', { bg: '#BDBDBD', fg: '#fff' }],
   ['לא מעוניין', { bg: '#C62828', fg: '#fff' }],
+  ['לא מהתחום', { bg: '#8D6E63', fg: '#fff' }],
   ['שילם בהעברה', { bg: '#66BB6A', fg: '#fff' }],
   ['שילם', { bg: '#2E7D32', fg: '#fff' }],
   ['אמ 3', { bg: '#64B5F6', fg: '#fff' }],
@@ -52,6 +54,7 @@ export type LeadStatusViewId =
   | 'status-follow-up'
   | 'status-paid'
   | 'status-not-interested'
+  | 'status-not-in-domain'
 
 export type LeadStatusViewConfig = {
   id: LeadStatusViewId
@@ -66,6 +69,7 @@ export const LEAD_STATUS_VIEWS: readonly LeadStatusViewConfig[] = [
   { id: 'status-follow-up', label: 'לחזור אליו', statuses: ['לחזור אליו', 'מעוניין מחכים לתשלום'] },
   { id: 'status-paid', label: 'שילם', statuses: ['שילם', 'שילם בהעברה'] },
   { id: 'status-not-interested', label: 'לא מעוניין', statuses: ['לא מעוניין', 'לא מעוניין דמי הקמה'] },
+  { id: 'status-not-in-domain', label: 'לא מהתחום', statuses: ['לא מהתחום'] },
 ]
 
 const STATUS_TO_VIEW_ID = new Map<string, LeadStatusViewId>(

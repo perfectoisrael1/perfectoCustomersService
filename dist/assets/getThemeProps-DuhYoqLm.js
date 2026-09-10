@@ -1,0 +1,1 @@
+import{dt as e}from"./List-DvcqEFuI.js";function t(t){let{theme:n,name:r,props:i}=t;return!n||!n.components||!n.components[r]||!n.components[r].defaultProps?i:e(n.components[r].defaultProps,i)}export{t};

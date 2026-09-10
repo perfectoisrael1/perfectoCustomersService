@@ -3,17 +3,24 @@ import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-rout
 import {
   AppBar,
   Box,
+  Collapse,
   Divider,
   Drawer,
   IconButton,
   List,
   ListItemButton,
   ListItemText,
+  Paper,
+  Popper,
   Toolbar,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutIcon from '@mui/icons-material/Logout'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAuth } from '../context/useAuth'
 import { getConversations } from '../api/csApi'
 import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/headerLayout'
@@ -21,7 +28,16 @@ import { isManagerRole } from '../lib/roles'
 
 const drawerWidth = 260
 
-type NavLink = { to: string; prefix: string; label: string }
+type NavChild = { to: string; label: string }
+type NavLink = { to: string; prefix: string; label: string; children?: NavChild[] }
+
+const FLYOUT_LEAVE_CLOSE_MS = 180
+
+function pathMatches(pathname: string, to: string): boolean {
+  const path = pathname.replace(/\/+$/, '') || '/'
+  const target = to.split('?')[0].replace(/\/+$/, '') || '/'
+  return path === target
+}
 
 const mainLinks: NavLink[] = [
   { to: '/personal-area', prefix: '/personal-area', label: 'אזור אישי' },
@@ -38,6 +54,17 @@ const mainLinks: NavLink[] = [
   { to: '/notifications', prefix: '/notifications', label: 'התראות' },
   { to: '/conversations?tab=open', prefix: '/conversations', label: 'שיחות' },
   { to: '/complaints', prefix: '/complaints', label: 'תלונות' },
+  { to: '/expenses', prefix: '/expenses', label: 'הוצאות' },
+  {
+    to: '/general/scheduled-lead-calls',
+    prefix: '/general',
+    label: 'כללי',
+    children: [
+      { to: '/general/scheduled-lead-calls', label: 'שיחות מתוזמנות ללידים' },
+      { to: '/general/blacklist', label: 'רשימה שחורה' },
+      { to: '/general/blacklist-attempts', label: 'ניסיונות שנחסמו' },
+    ],
+  },
 ]
 
 const bottomLinks: NavLink[] = [
@@ -51,6 +78,7 @@ const MANAGER_ONLY_PREFIXES = new Set([
   '/domains',
   '/dashboards',
   '/notifications',
+  '/expenses',
 ])
 
 function filterNavLinks(links: NavLink[], isManager: boolean): NavLink[] {
@@ -64,6 +92,165 @@ function pageTitleForPath(pathname: string, links: NavLink[] = allLinks): string
   const path = pathname.replace(/\/+$/, '') || '/'
   const hit = links.find((l) => path === l.prefix || path.startsWith(`${l.prefix}/`))
   return hit?.label ?? 'פרפקטו'
+}
+
+const selectedNavSx = {
+  bgcolor: 'rgba(0,0,0,0.06)',
+  borderLeft: '4px solid',
+  borderColor: 'primary.main',
+} as const
+
+function NavAggregateItem({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: NavLink
+  pathname: string
+  onNavigate: () => void
+}) {
+  const theme = useTheme()
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true })
+  const children = item.children ?? []
+  const groupSelected = pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)
+  const [open, setOpen] = useState(false)
+  const closeTimerRef = useRef<number | null>(null)
+  const anchorRef = useRef<HTMLDivElement | null>(null)
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  const openMenu = () => {
+    clearCloseTimer()
+    setOpen(true)
+  }
+
+  const closeMenuSoon = () => {
+    clearCloseTimer()
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null
+      setOpen(false)
+    }, FLYOUT_LEAVE_CLOSE_MS)
+  }
+
+  useEffect(() => () => clearCloseTimer(), [])
+
+  useEffect(() => {
+    if (!isDesktop && groupSelected) setOpen(true)
+  }, [isDesktop, groupSelected])
+
+  const childButtonSx = (selected: boolean) => ({
+    ...(selected ? { bgcolor: 'rgba(0,0,0,0.06)' } : {}),
+    '&:hover': { bgcolor: 'rgba(0,0,0,0.06)' },
+  })
+
+  const childrenList = (
+    <List disablePadding dense>
+      {children.map((child) => {
+        const selected = pathMatches(pathname, child.to)
+        return (
+          <ListItemButton
+            key={child.to}
+            component={RouterLink}
+            to={child.to}
+            selected={selected}
+            onClick={() => {
+              setOpen(false)
+              onNavigate()
+            }}
+            sx={childButtonSx(selected)}
+          >
+            <ListItemText
+              primary={child.label}
+              slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right', width: '100%', fontSize: 14 } } }}
+              sx={{ width: '100%', m: 0 }}
+            />
+          </ListItemButton>
+        )
+      })}
+    </List>
+  )
+
+  if (!isDesktop) {
+    return (
+      <Box>
+        <ListItemButton
+          selected={groupSelected}
+          onClick={() => setOpen((v) => !v)}
+          sx={groupSelected ? selectedNavSx : undefined}
+        >
+          <ListItemText
+            primary={item.label}
+            slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right', width: '100%' } } }}
+            sx={{ width: '100%', m: 0 }}
+          />
+          <ExpandMoreIcon
+            sx={{
+              fontSize: 20,
+              color: 'text.secondary',
+              transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: theme.transitions.create('transform', {
+                duration: theme.transitions.duration.shorter,
+              }),
+            }}
+          />
+        </ListItemButton>
+        <Collapse in={open} timeout="auto" unmountOnExit>
+          <Box sx={{ pr: 1.5 }}>{childrenList}</Box>
+        </Collapse>
+      </Box>
+    )
+  }
+
+  return (
+    <Box ref={anchorRef} onMouseEnter={openMenu} onMouseLeave={closeMenuSoon}>
+      <ListItemButton
+        selected={groupSelected}
+        component={RouterLink}
+        to={item.to}
+        onClick={onNavigate}
+        sx={groupSelected ? selectedNavSx : undefined}
+      >
+        <ListItemText
+          primary={item.label}
+          slotProps={{ primary: { sx: { fontWeight: 600, textAlign: 'right', width: '100%' } } }}
+          sx={{ width: '100%', m: 0 }}
+        />
+        <ChevronLeftIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+      </ListItemButton>
+      <Popper
+        open={open}
+        anchorEl={anchorRef.current}
+        placement="left-start"
+        modifiers={[
+          { name: 'offset', options: { offset: [0, 8] } },
+          { name: 'preventOverflow', options: { padding: 8 } },
+        ]}
+        sx={{ zIndex: (t) => t.zIndex.modal + 2 }}
+      >
+        <Paper
+          elevation={8}
+          onMouseEnter={openMenu}
+          onMouseLeave={closeMenuSoon}
+          sx={{
+            minWidth: 220,
+            py: 0.5,
+            direction: 'rtl',
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: '0 10px 28px rgba(0,0,0,0.12)',
+          }}
+        >
+          {childrenList}
+        </Paper>
+      </Popper>
+    </Box>
+  )
 }
 
 function NavList({
@@ -80,6 +267,16 @@ function NavList({
   return (
     <List disablePadding>
       {items.map((l) => {
+        if (l.children?.length) {
+          return (
+            <NavAggregateItem
+              key={l.prefix}
+              item={l}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
+          )
+        }
         const selected = pathname === l.prefix || pathname.startsWith(`${l.prefix}/`)
         const showOpenCount = l.prefix === '/conversations' && openConversationsCount > 0
         return (
@@ -89,15 +286,7 @@ function NavList({
             to={l.to}
             selected={selected}
             onClick={onNavigate}
-            sx={{
-              ...(selected
-                ? {
-                  bgcolor: 'rgba(0,0,0,0.06)',
-                  borderLeft: '4px solid',
-                  borderColor: 'primary.main',
-                }
-                : {}),
-            }}
+            sx={selected ? selectedNavSx : undefined}
           >
             <ListItemText
               primary={

@@ -836,6 +836,105 @@ export async function getPaymentLinks() {
   return csFetch<PaymentLinkRow[]>('/customer-service/payment-links')
 }
 
+export type OutgoingCallStatus = 'pending' | 'completed' | 'failed'
+
+export type OutgoingCall = {
+  id: number
+  lead_id: string
+  full_name: string | null
+  phone_number: string
+  scheduled_for: string | null
+  status: OutgoingCallStatus
+  called_at: string | null
+  created_at: string | null
+}
+
+export async function getOutgoingCalls() {
+  return csFetch<OutgoingCall[]>('/customer-service/outgoing-calls')
+}
+
+export type ExpenseCurrency = 'ILS' | 'USD' | 'EUR'
+
+export type Expense = {
+  id: number
+  expenseName: string
+  receiptDate: string | null
+  amount: number
+  currency: ExpenseCurrency | string
+  invoiceUrl: string | null
+  accountId: number | null
+  accountName: string | null
+  createdByUserId: number | null
+  createdAt: string
+}
+
+export type CreateExpenseInput = {
+  expenseName: string
+  receiptDate?: string | null
+  amount: number
+  currency?: string
+  accountId?: number | null
+}
+
+export async function getExpenses() {
+  return csFetch<Expense[]>('/customer-service/expenses')
+}
+
+export async function createExpense(body: CreateExpenseInput) {
+  return csFetch<Expense>('/customer-service/expenses', { method: 'POST', body })
+}
+
+export async function uploadExpenseWithInvoice(payload: CreateExpenseInput, file: File) {
+  const token = getStoredToken()
+  const fd = new FormData()
+  fd.append('expenseName', payload.expenseName || '')
+  fd.append('receiptDate', payload.receiptDate || '')
+  fd.append('amount', String(payload.amount))
+  fd.append('currency', payload.currency || 'ILS')
+  if (payload.accountId) fd.append('accountId', String(payload.accountId))
+  fd.append('invoice', file)
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${baseUrl()}/customer-service/expenses/upload`, {
+    method: 'POST',
+    headers,
+    body: fd,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  return (await res.json()) as Expense
+}
+
+export async function deleteExpense(id: number) {
+  return csFetch<void>(`/customer-service/expenses/${id}`, { method: 'DELETE' })
+}
+
+export async function openExpenseInvoiceView(expenseId: number): Promise<void> {
+  const token = getStoredToken()
+  const headers: Record<string, string> = { 'X-Source': SOURCE }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${baseUrl()}/customer-service/expenses/${expenseId}/invoice`, {
+    method: 'GET',
+    headers,
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const msg = await parseErr(res)
+    const error = new Error(msg || 'בקשה נכשלה') as ApiError
+    error.status = res.status
+    throw error
+  }
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  window.open(objectUrl, '_blank', 'noopener,noreferrer')
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+}
+
 export type PerfectoCustomerServiceUser = Record<string, unknown> & {
   id: number
   fullName?: string
@@ -981,3 +1080,59 @@ export async function closeConversation(conversationId: number) {
     { method: 'POST' },
   )
 }
+
+export type PhoneBlacklistEntry = {
+  id: number
+  phone: string
+  phoneCore9: string
+  name: string | null
+  notes: string | null
+  createdByUserId: number | null
+  createdAt: string
+}
+
+export type PhoneBlacklistAttempt = {
+  id: number
+  blacklistId: number | null
+  phone: string
+  phoneCore9: string
+  attemptedName: string | null
+  source: string
+  details: string | null
+  createdAt: string
+}
+
+export type CreatePhoneBlacklistInput = {
+  phone: string
+  name?: string | null
+  notes?: string | null
+}
+
+export async function getPhoneBlacklist() {
+  return csFetch<PhoneBlacklistEntry[]>('/customer-service/phone-blacklist')
+}
+
+export async function getPhoneBlacklistAttempts() {
+  return csFetch<PhoneBlacklistAttempt[]>('/customer-service/phone-blacklist/attempts')
+}
+
+export async function createPhoneBlacklistEntry(body: CreatePhoneBlacklistInput) {
+  return csFetch<PhoneBlacklistEntry>('/customer-service/phone-blacklist', {
+    method: 'POST',
+    body,
+  })
+}
+
+export async function deletePhoneBlacklistEntry(id: number) {
+  return csFetch<{ ok: boolean; id: number }>(`/customer-service/phone-blacklist/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deletePhoneBlacklistAttempt(id: number) {
+  return csFetch<{ ok: boolean; id: number }>(
+    `/customer-service/phone-blacklist/attempts/${id}`,
+    { method: 'DELETE' },
+  )
+}
+

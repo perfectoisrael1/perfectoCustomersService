@@ -9,10 +9,12 @@ import { useLeadsDashboard } from '../hooks/useLeadsDashboard'
 import { useCustomerServiceDashboard } from '../hooks/useCustomerServiceDashboard'
 import { useInquiriesDashboard } from '../hooks/useInquiriesDashboard'
 import { useSuppliersDashboard } from '../hooks/useSuppliersDashboard'
+import { useRevenueDashboard } from '../hooks/useRevenueDashboard'
 import CustomerServiceDashboardWidgets from './dashboards/CustomerServiceDashboardWidgets'
 import InquiriesDashboardWidgets from './dashboards/InquiriesDashboardWidgets'
 import LeadsDashboardWidgets from './dashboards/LeadsDashboardWidgets'
 import SuppliersDashboardWidgets from './dashboards/SuppliersDashboardWidgets'
+import RevenueDashboardWidgets from './dashboards/RevenueDashboardWidgets'
 import PayslipsDashboardPanel from './dashboards/PayslipsDashboardPanel'
 
 const REFRESH_BUTTON_SX = {
@@ -66,6 +68,7 @@ export default function DashboardsPage() {
   const isSuppliersTab = tab === 'suppliers'
   const isCustomerServiceTab = tab === 'customer-service'
   const isInquiriesTab = tab === 'inquiries'
+  const isRevenueTab = tab === 'revenue'
   const isPayslipsTab = tab === 'payslips'
   const { loading: leadsLoading, error: leadsError, load: loadLeads, counts } = useLeadsDashboard(isLeadsTab)
   const {
@@ -88,20 +91,30 @@ export default function DashboardsPage() {
     counts: inquiriesCounts,
     statusBreakdown: inquiriesStatusBreakdown,
   } = useInquiriesDashboard(isInquiriesTab)
+  const {
+    loading: revenueLoading,
+    error: revenueError,
+    load: loadRevenue,
+    rows: revenueRows,
+  } = useRevenueDashboard(isRevenueTab)
 
-  const showRefresh = isLeadsTab || isSuppliersTab || isCustomerServiceTab || isInquiriesTab
+  const showRefresh =
+    isLeadsTab || isSuppliersTab || isCustomerServiceTab || isInquiriesTab || isRevenueTab
   const refreshLoading = isLeadsTab
     ? leadsLoading
     : isSuppliersTab
       ? suppliersLoading
       : isCustomerServiceTab
         ? customerServiceLoading
-        : inquiriesLoading
+        : isInquiriesTab
+          ? inquiriesLoading
+          : revenueLoading
   const handleRefresh = () => {
     if (isLeadsTab) void loadLeads()
     else if (isSuppliersTab) void loadSuppliers()
     else if (isCustomerServiceTab) void loadCustomerService()
     else if (isInquiriesTab) void loadInquiries()
+    else if (isRevenueTab) void loadRevenue()
   }
 
   useEffect(() => {
@@ -214,6 +227,13 @@ export default function DashboardsPage() {
                 error={inquiriesError}
                 counts={inquiriesCounts}
                 statusBreakdown={inquiriesStatusBreakdown}
+              />
+            ) : null}
+            {isRevenueTab ? (
+              <RevenueDashboardWidgets
+                loading={revenueLoading}
+                error={revenueError}
+                rows={revenueRows}
               />
             ) : null}
             {isPayslipsTab ? <PayslipsDashboardPanel /> : null}

@@ -23,6 +23,7 @@ export const MANAGER_ONLY_ROUTE_PREFIXES = [
   '/domains',
   '/dashboards',
   '/notifications',
+  '/expenses',
 ] as const
 
 export function isManagerOnlyRoute(pathname: string): boolean {

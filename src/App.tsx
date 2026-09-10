@@ -24,6 +24,8 @@ const PersonalAreaPage = lazy(() => import('./pages/PersonalAreaPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'))
 const PaymentAttemptsPage = lazy(() => import('./pages/PaymentAttemptsPage'))
+const GeneralPage = lazy(() => import('./pages/GeneralPage'))
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
 const AccountDeletionRequestPage = lazy(() => import('./pages/AccountDeletionRequestPage'))
 
 function PageLoadFallback() {
@@ -114,10 +116,24 @@ export default function App() {
                 <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
                 <Route path="/accounts/:segment" element={<AccountsPage />} />
                 <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/blacklist" element={<Navigate to="/general/blacklist" replace />} />
+                <Route path="/blacklist/attempts" element={<Navigate to="/general/blacklist-attempts" replace />} />
+                <Route path="/blacklist/:segment" element={<Navigate to="/general/blacklist" replace />} />
+                <Route path="/general" element={<Navigate to="/general/scheduled-lead-calls" replace />} />
+                <Route path="/general/:segment" element={<GeneralPage />} />
                 <Route path="/payment-attempts" element={<PaymentAttemptsPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/conversations" element={<ConversationsPage />} />
                 <Route path="/complaints" element={<ComplaintsPage />} />
+                <Route
+                  path="/expenses"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <ExpensesPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
+                <Route path="/general/expenses" element={<Navigate to="/expenses" replace />} />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
                 <Route
                   path="/tasks/:tabSlug"
