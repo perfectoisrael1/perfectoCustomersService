@@ -27,6 +27,12 @@ export type Job = {
   status: string
   statusLabel: string
   exclusionReason: string
+  /** מונה ניסיונות חיוג פולואפ (0–2) */
+  followUp?: number
+  approvedAt?: string | null
+  followUpAt?: string | null
+  /** scheduled | called | done | skipped */
+  followUpStatus?: string | null
   created: string
   updated: string
 }

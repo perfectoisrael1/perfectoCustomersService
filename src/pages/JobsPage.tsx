@@ -70,7 +70,14 @@ import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
 } from '../layout/headerLayout'
 
-type JobsTab = 'today' | 'exceptions' | 'unassigned' | 'search' | 'leave' | 'campaigns'
+type JobsTab =
+  | 'today'
+  | 'exceptions'
+  | 'unassigned'
+  | 'follow-up'
+  | 'search'
+  | 'leave'
+  | 'campaigns'
 
 type CampaignSortColumn =
   | 'id'
@@ -94,7 +101,35 @@ type JobsSortColumn =
   | 'city'
   | 'statusLabel'
   | 'exclusionReason'
+  | 'followUp'
+  | 'followUpAt'
+  | 'followUpStatus'
+  | 'approvedAt'
   | 'created'
+
+const FOLLOW_UP_STATUS_LABEL_HE: Record<string, string> = {
+  scheduled: 'מתוזמן',
+  called: 'חייגו',
+  done: 'הושלם',
+  skipped: 'דולג',
+}
+
+function followUpStatusLabel(status: string | null | undefined): string {
+  const key = String(status || '').trim()
+  if (!key) return '—'
+  return FOLLOW_UP_STATUS_LABEL_HE[key] ?? key
+}
+
+function isJobFollowUpPipeline(row: Job): boolean {
+  return Boolean(String(row.followUpStatus || '').trim())
+}
+
+/** מתוזמן וחלף followUpAt — מוכן לחיוג */
+function isJobFollowUpDue(row: Job, nowMs = Date.now()): boolean {
+  if (String(row.followUpStatus || '').trim() !== 'scheduled') return false
+  const at = row.followUpAt ? new Date(String(row.followUpAt)).getTime() : NaN
+  return Number.isFinite(at) && at <= nowMs
+}
 
 function isUnassignedJob(row: Job): boolean {
   return row.accountId == null
@@ -133,6 +168,18 @@ function jobSortValue(row: Job, col: JobsSortColumn): string {
   if (col === 'city') {
     return jobCityDisplay(row)
   }
+  if (col === 'followUp') {
+    return String(Math.max(0, Math.floor(Number(row.followUp) || 0)))
+  }
+  if (col === 'followUpStatus') {
+    return followUpStatusLabel(row.followUpStatus)
+  }
+  if (col === 'followUpAt' || col === 'approvedAt') {
+    return String(row[col] ?? '')
+  }
+  if (col === 'phoneNumber') {
+    return String(row.customerPhone || row.phoneNumber || '').trim()
+  }
   return String(row[col] ?? '').trim()
 }
 
@@ -140,6 +187,7 @@ const VALID_SEGMENTS: JobsTab[] = [
   'today',
   'exceptions',
   'unassigned',
+  'follow-up',
   'search',
   'leave',
   'campaigns',
@@ -287,6 +335,7 @@ function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
     })
   }
   if (tab === 'unassigned') return all.filter(isUnassignedJob)
+  if (tab === 'follow-up') return all.filter(isJobFollowUpPipeline)
   return all
 }
 
@@ -390,6 +439,12 @@ export default function JobsPage() {
       navigate('/jobs/today', { replace: true })
     }
   }, [segment, navigate])
+
+  useEffect(() => {
+    if (tab === 'follow-up') {
+      setSort({ col: 'followUpAt', dir: 'asc' })
+    }
+  }, [tab])
 
   const loadCampaigns = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true
@@ -558,6 +613,9 @@ export default function JobsPage() {
         r.leadDomain,
         r.city,
         r.exclusionReason,
+        r.followUpStatus,
+        r.followUpAt,
+        r.approvedAt,
       ]
         .map((x) => String(x || '').toLowerCase())
         .join(' ')
@@ -597,15 +655,26 @@ export default function JobsPage() {
     setSort((prev) =>
       prev.col === col
         ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: col === 'created' || col === 'id' ? 'desc' : 'asc' },
+        : {
+            col,
+            dir:
+              col === 'created' || col === 'id' || col === 'followUp' || col === 'approvedAt'
+                ? 'desc'
+                : col === 'followUpAt'
+                  ? 'asc'
+                  : 'asc',
+          },
     )
   }, [])
 
   const counts = useMemo(() => {
+    const followUpRows = filterJobsForTab(allJobs, 'follow-up')
     return {
       today: filterJobsForTab(allJobs, 'today').length,
       exceptions: filterJobsForTab(allJobs, 'exceptions').length,
       unassigned: filterJobsForTab(allJobs, 'unassigned').length,
+      followUp: followUpRows.length,
+      followUpDue: followUpRows.filter((r) => isJobFollowUpDue(r)).length,
       search: allJobs.length,
       campaigns: allCampaigns.length,
     }
@@ -788,6 +857,14 @@ export default function JobsPage() {
                   <Tab value="today" label={`פניות היום (${counts.today})`} />
                   <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
                   <Tab value="unassigned" label={`פניות ללא ספקים (${counts.unassigned})`} />
+                  <Tab
+                    value="follow-up"
+                    label={
+                      counts.followUpDue > 0
+                        ? `פולואפ (${counts.followUpDue} לטיפול / ${counts.followUp})`
+                        : `פולואפ (${counts.followUp})`
+                    }
+                  />
                   <Tab value="search" label={`כל הפניות (${counts.search})`} />
                   <Tab value="leave" label="השארת פנייה" />
                   <Tab value="campaigns" label={`קמפיינים (${counts.campaigns})`} />
@@ -1258,15 +1335,60 @@ export default function JobsPage() {
                             סטטוס
                           </TableSortLabel>
                         </TableCell>
-                        <TableCell sortDirection={sort.col === 'exclusionReason' ? sort.dir : false}>
-                          <TableSortLabel
-                            active={sort.col === 'exclusionReason'}
-                            direction={sort.col === 'exclusionReason' ? sort.dir : 'asc'}
-                            onClick={() => onSortColumn('exclusionReason')}
+                        {tab === 'follow-up' ? (
+                          <>
+                            <TableCell sortDirection={sort.col === 'followUp' ? sort.dir : false}>
+                              <TableSortLabel
+                                active={sort.col === 'followUp'}
+                                direction={sort.col === 'followUp' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('followUp')}
+                              >
+                                ניסיון
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell
+                              sortDirection={sort.col === 'followUpStatus' ? sort.dir : false}
+                            >
+                              <TableSortLabel
+                                active={sort.col === 'followUpStatus'}
+                                direction={sort.col === 'followUpStatus' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('followUpStatus')}
+                              >
+                                סטטוס פולואפ
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={sort.col === 'followUpAt' ? sort.dir : false}>
+                              <TableSortLabel
+                                active={sort.col === 'followUpAt'}
+                                direction={sort.col === 'followUpAt' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('followUpAt')}
+                              >
+                                זמן פולואפ
+                              </TableSortLabel>
+                            </TableCell>
+                            <TableCell sortDirection={sort.col === 'approvedAt' ? sort.dir : false}>
+                              <TableSortLabel
+                                active={sort.col === 'approvedAt'}
+                                direction={sort.col === 'approvedAt' ? sort.dir : 'asc'}
+                                onClick={() => onSortColumn('approvedAt')}
+                              >
+                                אושר ב־
+                              </TableSortLabel>
+                            </TableCell>
+                          </>
+                        ) : (
+                          <TableCell
+                            sortDirection={sort.col === 'exclusionReason' ? sort.dir : false}
                           >
-                            החרגות
-                          </TableSortLabel>
-                        </TableCell>
+                            <TableSortLabel
+                              active={sort.col === 'exclusionReason'}
+                              direction={sort.col === 'exclusionReason' ? sort.dir : 'asc'}
+                              onClick={() => onSortColumn('exclusionReason')}
+                            >
+                              החרגות
+                            </TableSortLabel>
+                          </TableCell>
+                        )}
                         <TableCell sortDirection={sort.col === 'created' ? sort.dir : false}>
                           <TableSortLabel
                             active={sort.col === 'created'}
@@ -1287,6 +1409,8 @@ export default function JobsPage() {
                           tab === 'unassigned' &&
                           !catalogLoading &&
                           isUnassignedCatalogMismatch(row, domainCatalogSet, cityCatalogSet)
+                        const highlightFollowUpDue =
+                          tab === 'follow-up' && isJobFollowUpDue(row)
                         return (
                         <TableRow
                           key={row.id}
@@ -1295,6 +1419,12 @@ export default function JobsPage() {
                             cursor: 'pointer',
                             ...(highlightUnassignedMismatch
                               ? UNASSIGNED_CATALOG_MISMATCH_ROW_SX
+                              : null),
+                            ...(highlightFollowUpDue
+                              ? {
+                                  bgcolor: 'rgba(255, 152, 0, 0.12)',
+                                  '&:hover': { bgcolor: 'rgba(255, 152, 0, 0.18)' },
+                                }
                               : null),
                           }}
                           onClick={() => setDetail(row)}
@@ -1334,9 +1464,39 @@ export default function JobsPage() {
                               }}
                             />
                           </TableCell>
-                          <TableCell sx={{ maxWidth: 180 }} title={row.exclusionReason || ''}>
-                            {row.exclusionReason || '—'}
-                          </TableCell>
+                          {tab === 'follow-up' ? (
+                            <>
+                              <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                                {Math.max(0, Math.floor(Number(row.followUp) || 0))}/2
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={
+                                    isJobFollowUpDue(row)
+                                      ? 'לטיפול עכשיו'
+                                      : followUpStatusLabel(row.followUpStatus)
+                                  }
+                                  color={
+                                    isJobFollowUpDue(row)
+                                      ? 'warning'
+                                      : row.followUpStatus === 'done'
+                                        ? 'success'
+                                        : row.followUpStatus === 'skipped'
+                                          ? 'default'
+                                          : 'info'
+                                  }
+                                  sx={{ fontWeight: 700 }}
+                                />
+                              </TableCell>
+                              <TableCell>{formatCsDateTime(row.followUpAt)}</TableCell>
+                              <TableCell>{formatCsDateTime(row.approvedAt)}</TableCell>
+                            </>
+                          ) : (
+                            <TableCell sx={{ maxWidth: 180 }} title={row.exclusionReason || ''}>
+                              {row.exclusionReason || '—'}
+                            </TableCell>
+                          )}
                           <TableCell>{formatCsDateTime(row.created)}</TableCell>
                           <TableCell align="center" onClick={(e) => e.stopPropagation()} sx={{ overflow: 'visible', textOverflow: 'clip' }}>
                             {tab === 'exceptions' ? (
@@ -1465,6 +1625,21 @@ export default function JobsPage() {
               ) : null}
               <Typography><strong>סטטוס:</strong> {detail.statusLabel}</Typography>
               <Typography><strong>החרגות:</strong> {detail.exclusionReason || '—'}</Typography>
+              {detail.followUpStatus ? (
+                <>
+                  <Typography>
+                    <strong>פולואפ:</strong> {followUpStatusLabel(detail.followUpStatus)} · ניסיון{' '}
+                    {Math.max(0, Math.floor(Number(detail.followUp) || 0))}/2
+                    {isJobFollowUpDue(detail) ? ' · לטיפול עכשיו' : ''}
+                  </Typography>
+                  <Typography>
+                    <strong>זמן פולואפ:</strong> {formatCsDateTime(detail.followUpAt)}
+                  </Typography>
+                  <Typography>
+                    <strong>אושר ב־:</strong> {formatCsDateTime(detail.approvedAt)}
+                  </Typography>
+                </>
+              ) : null}
               <Typography><strong>תיאור:</strong> {detail.description}</Typography>
               <Typography variant="caption" color="text.secondary">
                 נוצר: {formatCsDateTime(detail.created)} · עודכן: {formatCsDateTime(detail.updated)}
