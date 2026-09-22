@@ -40,10 +40,16 @@ import {
 } from '../lib/outgoingCallsUi'
 import BlacklistEntriesTab from '../components/BlacklistEntriesTab'
 import BlacklistAttemptsTab from '../components/BlacklistAttemptsTab'
+import MembershipFeeSettingsTab from '../components/MembershipFeeSettingsTab'
 
-type GeneralTab = 'scheduled-lead-calls' | 'blacklist' | 'blacklist-attempts'
+type GeneralTab = 'scheduled-lead-calls' | 'blacklist' | 'blacklist-attempts' | 'membership-fee'
 
-const GENERAL_TABS: GeneralTab[] = ['scheduled-lead-calls', 'blacklist', 'blacklist-attempts']
+const GENERAL_TABS: GeneralTab[] = [
+  'scheduled-lead-calls',
+  'blacklist',
+  'blacklist-attempts',
+  'membership-fee',
+]
 
 const STATUS_TABS: { id: OutgoingCallStatusFilter; label: string }[] = [
   { id: 'all', label: 'הכל' },
@@ -59,6 +65,7 @@ function segmentToTab(segment: string | undefined): GeneralTab {
   const s = String(segment || '').trim()
   if (s === 'blacklist' || s === 'list') return 'blacklist'
   if (s === 'blacklist-attempts' || s === 'attempts') return 'blacklist-attempts'
+  if (s === 'membership-fee' || s === 'setup-fee' || s === 'דמי-הקמה') return 'membership-fee'
   return 'scheduled-lead-calls'
 }
 
@@ -107,6 +114,7 @@ export default function GeneralPage() {
               {tab === 'scheduled-lead-calls' ? <ScheduledLeadCallsTab /> : null}
               {tab === 'blacklist' ? <BlacklistEntriesTab /> : null}
               {tab === 'blacklist-attempts' ? <BlacklistAttemptsTab /> : null}
+              {tab === 'membership-fee' ? <MembershipFeeSettingsTab /> : null}
             </Box>
           </Stack>
         </CardContent>

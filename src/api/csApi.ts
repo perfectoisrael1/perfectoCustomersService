@@ -1142,3 +1142,23 @@ export async function deletePhoneBlacklistAttempt(id: number) {
   )
 }
 
+export type MembershipFeeSettings = {
+  membershipFeeIls: number
+  updatedAt: string | null
+  source?: 'db' | 'env_or_default'
+}
+
+export async function getMembershipFeeSettings() {
+  return csFetch<MembershipFeeSettings>('/customer-service/settings/membership-fee')
+}
+
+export async function patchMembershipFeeSettings(membershipFeeIls: number) {
+  return csFetch<{ membershipFeeIls: number; updatedAt: string }>(
+    '/customer-service/settings/membership-fee',
+    {
+      method: 'PATCH',
+      body: { membershipFeeIls },
+    },
+  )
+}
+

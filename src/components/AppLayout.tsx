@@ -63,6 +63,7 @@ const mainLinks: NavLink[] = [
       { to: '/general/scheduled-lead-calls', label: 'שיחות מתוזמנות ללידים' },
       { to: '/general/blacklist', label: 'רשימה שחורה' },
       { to: '/general/blacklist-attempts', label: 'ניסיונות שנחסמו' },
+      { to: '/general/membership-fee', label: 'דמי הקמה' },
     ],
   },
 ]
