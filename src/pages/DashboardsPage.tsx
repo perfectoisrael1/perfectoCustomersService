@@ -16,6 +16,8 @@ import LeadsDashboardWidgets from './dashboards/LeadsDashboardWidgets'
 import SuppliersDashboardWidgets from './dashboards/SuppliersDashboardWidgets'
 import RevenueDashboardWidgets from './dashboards/RevenueDashboardWidgets'
 import PayslipsDashboardPanel from './dashboards/PayslipsDashboardPanel'
+import PpcDashboardWidgets from './dashboards/PpcDashboardWidgets'
+import { usePpcDashboard } from '../hooks/usePpcDashboard'
 
 const REFRESH_BUTTON_SX = {
   backgroundColor: '#FFDD00',
@@ -31,7 +33,14 @@ const REFRESH_BUTTON_SX = {
   },
 } as const
 
-type DashboardsTab = 'leads' | 'suppliers' | 'customer-service' | 'inquiries' | 'revenue' | 'payslips'
+type DashboardsTab =
+  | 'leads'
+  | 'suppliers'
+  | 'customer-service'
+  | 'inquiries'
+  | 'revenue'
+  | 'payslips'
+  | 'ppc'
 
 const VALID_SEGMENTS: DashboardsTab[] = [
   'leads',
@@ -40,6 +49,7 @@ const VALID_SEGMENTS: DashboardsTab[] = [
   'inquiries',
   'revenue',
   'payslips',
+  'ppc',
 ]
 
 const TAB_LABELS: Record<DashboardsTab, string> = {
@@ -49,6 +59,17 @@ const TAB_LABELS: Record<DashboardsTab, string> = {
   inquiries: 'פניות',
   revenue: 'הכנסות',
   payslips: 'תלושים',
+  ppc: 'PPC',
+}
+
+const TAB_PATHS: Record<DashboardsTab, string> = {
+  leads: '/dashboards/leads',
+  suppliers: '/dashboards/suppliers',
+  'customer-service': '/dashboards/customer-service',
+  inquiries: '/dashboards/inquiries',
+  revenue: '/dashboards/revenue',
+  payslips: '/dashboards/payslips',
+  ppc: '/dashboards/ppc',
 }
 
 function segmentToTab(segment: string | undefined): DashboardsTab {
@@ -57,7 +78,7 @@ function segmentToTab(segment: string | undefined): DashboardsTab {
 }
 
 function tabToPath(tab: DashboardsTab): string {
-  return `/dashboards/${tab}`
+  return TAB_PATHS[tab]
 }
 
 export default function DashboardsPage() {
@@ -70,6 +91,7 @@ export default function DashboardsPage() {
   const isInquiriesTab = tab === 'inquiries'
   const isRevenueTab = tab === 'revenue'
   const isPayslipsTab = tab === 'payslips'
+  const isPpcTab = tab === 'ppc'
   const { loading: leadsLoading, error: leadsError, load: loadLeads, counts } = useLeadsDashboard(isLeadsTab)
   const {
     loading: suppliersLoading,
@@ -97,9 +119,15 @@ export default function DashboardsPage() {
     load: loadRevenue,
     rows: revenueRows,
   } = useRevenueDashboard(isRevenueTab)
+  const {
+    loading: ppcLoading,
+    error: ppcError,
+    load: loadPpc,
+    count: ppcCount,
+  } = usePpcDashboard(isPpcTab)
 
   const showRefresh =
-    isLeadsTab || isSuppliersTab || isCustomerServiceTab || isInquiriesTab || isRevenueTab
+    isLeadsTab || isSuppliersTab || isCustomerServiceTab || isInquiriesTab || isRevenueTab || isPpcTab
   const refreshLoading = isLeadsTab
     ? leadsLoading
     : isSuppliersTab
@@ -108,13 +136,16 @@ export default function DashboardsPage() {
         ? customerServiceLoading
         : isInquiriesTab
           ? inquiriesLoading
-          : revenueLoading
+          : isPpcTab
+            ? ppcLoading
+            : revenueLoading
   const handleRefresh = () => {
     if (isLeadsTab) void loadLeads()
     else if (isSuppliersTab) void loadSuppliers()
     else if (isCustomerServiceTab) void loadCustomerService()
     else if (isInquiriesTab) void loadInquiries()
     else if (isRevenueTab) void loadRevenue()
+    else if (isPpcTab) void loadPpc()
   }
 
   useEffect(() => {
@@ -237,6 +268,9 @@ export default function DashboardsPage() {
               />
             ) : null}
             {isPayslipsTab ? <PayslipsDashboardPanel /> : null}
+            {isPpcTab ? (
+              <PpcDashboardWidgets loading={ppcLoading} error={ppcError} count={ppcCount} />
+            ) : null}
           </Stack>
         </CardContent>
       </Card>

@@ -1636,6 +1636,9 @@ export default function JobsPage() {
                     <strong>זמן פולואפ:</strong> {formatCsDateTime(detail.followUpAt)}
                   </Typography>
                   <Typography>
+                    <strong>פולואפ אחרון:</strong> {formatCsDateTime(detail.lastFollowUpAt)}
+                  </Typography>
+                  <Typography>
                     <strong>אושר ב־:</strong> {formatCsDateTime(detail.approvedAt)}
                   </Typography>
                 </>

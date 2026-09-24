@@ -31,8 +31,10 @@ export type Job = {
   followUp?: number
   approvedAt?: string | null
   followUpAt?: string | null
-  /** scheduled | called | done | skipped */
+  /** 1 מתוך 2 | done | skipped */
   followUpStatus?: string | null
+  /** זמן השיחה האחרונה שיצאה בפולואפ */
+  lastFollowUpAt?: string | null
   created: string
   updated: string
 }
@@ -303,6 +305,10 @@ export async function meRequest(token: string) {
 
 export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
+}
+
+export async function getPpcJobCount() {
+  return csFetch<{ count: number }>('/customer-service/jobs/ppc-count')
 }
 
 export async function getJobsForAccount(accountId: number) {
