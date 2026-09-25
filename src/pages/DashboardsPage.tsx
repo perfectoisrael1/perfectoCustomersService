@@ -18,6 +18,7 @@ import RevenueDashboardWidgets from './dashboards/RevenueDashboardWidgets'
 import PayslipsDashboardPanel from './dashboards/PayslipsDashboardPanel'
 import PpcDashboardWidgets from './dashboards/PpcDashboardWidgets'
 import { usePpcDashboard } from '../hooks/usePpcDashboard'
+import { ppcKindFromSlug, ppcDashboardPath } from '../lib/ppcDashboardRoutes'
 
 const REFRESH_BUTTON_SX = {
   backgroundColor: '#FFDD00',
@@ -82,9 +83,18 @@ function tabToPath(tab: DashboardsTab): string {
 }
 
 export default function DashboardsPage() {
-  const { segment } = useParams<{ segment: string }>()
+  const { segment, subSegment, jobId: jobIdParam } = useParams<{
+    segment: string
+    subSegment?: string
+    jobId?: string
+  }>()
   const navigate = useNavigate()
   const tab = segmentToTab(segment)
+  const ppcKind = tab === 'ppc' ? ppcKindFromSlug(subSegment) : null
+  const ppcJobId = (() => {
+    const n = Number(jobIdParam)
+    return Number.isFinite(n) && n > 0 ? n : null
+  })()
   const isLeadsTab = tab === 'leads'
   const isSuppliersTab = tab === 'suppliers'
   const isCustomerServiceTab = tab === 'customer-service'
@@ -123,7 +133,13 @@ export default function DashboardsPage() {
     loading: ppcLoading,
     error: ppcError,
     load: loadPpc,
-    count: ppcCount,
+    summary: ppcSummary,
+    period: ppcPeriod,
+    setPeriod: setPpcPeriod,
+    customFrom: ppcCustomFrom,
+    setCustomFrom: setPpcCustomFrom,
+    customTo: ppcCustomTo,
+    setCustomTo: setPpcCustomTo,
   } = usePpcDashboard(isPpcTab)
 
   const showRefresh =
@@ -152,8 +168,16 @@ export default function DashboardsPage() {
     const s = String(segment || '').trim()
     if (s && !VALID_SEGMENTS.includes(s as DashboardsTab)) {
       navigate(tabToPath('leads'), { replace: true })
+      return
     }
-  }, [segment, navigate])
+    if (tab === 'ppc' && subSegment && !ppcKind) {
+      navigate(ppcDashboardPath(), { replace: true })
+      return
+    }
+    if (tab !== 'ppc' && (subSegment || jobIdParam)) {
+      navigate(tabToPath(tab), { replace: true })
+    }
+  }, [segment, subSegment, jobIdParam, tab, ppcKind, navigate])
 
   const setTab = (next: DashboardsTab) => {
     if (next !== tab) navigate(tabToPath(next))
@@ -269,7 +293,19 @@ export default function DashboardsPage() {
             ) : null}
             {isPayslipsTab ? <PayslipsDashboardPanel /> : null}
             {isPpcTab ? (
-              <PpcDashboardWidgets loading={ppcLoading} error={ppcError} count={ppcCount} />
+              <PpcDashboardWidgets
+                loading={ppcLoading}
+                error={ppcError}
+                summary={ppcSummary}
+                period={ppcPeriod}
+                onPeriodChange={setPpcPeriod}
+                customFrom={ppcCustomFrom}
+                customTo={ppcCustomTo}
+                onCustomFromChange={setPpcCustomFrom}
+                onCustomToChange={setPpcCustomTo}
+                kind={ppcKind}
+                jobId={ppcJobId}
+              />
             ) : null}
           </Stack>
         </CardContent>

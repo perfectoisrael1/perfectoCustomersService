@@ -39,6 +39,8 @@ export type Job = {
   lastFollowUpAt?: string | null
   created: string
   updated: string
+  source?: string | null
+  paidAmount?: number
 }
 
 export type JobCampaign = {
@@ -311,6 +313,36 @@ export async function getJobs() {
 
 export async function getPpcJobCount() {
   return csFetch<{ count: number }>('/customer-service/jobs/ppc-count')
+}
+
+export type PpcDashboardKind =
+  | 'profit'
+  | 'ppcLeads'
+  | 'ppcApproved'
+  | 'followUpsCreated'
+  | 'followUpsApproved'
+
+export type PpcDashboardRows = Record<PpcDashboardKind, Job[]>
+
+export type PpcDashboardSummary = {
+  ppcLeads: number
+  ppcApproved: number
+  followUpsCreated: number
+  followUpsApproved: number
+  profit: number
+  rows: PpcDashboardRows
+}
+
+export async function getPpcDashboard(fromYmd?: string | null, toYmd?: string | null) {
+  const params = new URLSearchParams()
+  const from = String(fromYmd || '').trim().slice(0, 10)
+  const to = String(toYmd || '').trim().slice(0, 10)
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const query = params.toString()
+  return csFetch<PpcDashboardSummary>(
+    `/customer-service/jobs/ppc-dashboard${query ? `?${query}` : ''}`,
+  )
 }
 
 export async function getJobsForAccount(accountId: number) {

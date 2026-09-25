@@ -171,7 +171,7 @@ export default function App() {
                 />
                 <Route path="/dashboards" element={<Navigate to="/dashboards/leads" replace />} />
                 <Route
-                  path="/dashboards/:segment"
+                  path="/dashboards/:segment/:subSegment?/:jobId?"
                   element={(
                     <ManagerProtectedRoute>
                       <DashboardsPage />
