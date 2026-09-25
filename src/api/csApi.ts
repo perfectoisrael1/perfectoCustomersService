@@ -27,11 +27,13 @@ export type Job = {
   status: string
   statusLabel: string
   exclusionReason: string
-  /** מונה ניסיונות חיוג פולואפ (0–2) */
+  /** שיחות פולואפ שאושרו (0–2) */
   followUp?: number
+  /** שליחות webhook לחיוג (מקסימום 4) */
+  followUpCallAttempts?: number
   approvedAt?: string | null
   followUpAt?: string | null
-  /** 1 מתוך 2 | done | skipped */
+  /** מחכה לשיחה | pending_call | 1 מתוך 2 | done | skipped */
   followUpStatus?: string | null
   /** זמן השיחה האחרונה שיצאה בפולואפ */
   lastFollowUpAt?: string | null

@@ -110,6 +110,9 @@ type JobsSortColumn =
 const FOLLOW_UP_STATUS_LABEL_HE: Record<string, string> = {
   scheduled: 'מתוזמן',
   called: 'חייגו',
+  'מחכה לשיחה': 'מחכה לשיחה',
+  pending_call: 'ממתין לאישור',
+  '1 מתוך 2': '1 מתוך 2',
   done: 'הושלם',
   skipped: 'דולג',
 }
