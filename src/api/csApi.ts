@@ -27,6 +27,9 @@ export type Job = {
   status: string
   statusLabel: string
   exclusionReason: string
+  /** NULL = טרם נקבע; true = אושר; false = לא אושר */
+  exclusionApproved?: boolean | null
+  exclusionDecisionNote?: string | null
   /** שיחות פולואפ שאושרו (0–2) */
   followUp?: number
   /** שליחות webhook לחיוג (מקסימום 4) */
@@ -41,27 +44,6 @@ export type Job = {
   updated: string
   source?: string | null
   paidAmount?: number
-}
-
-export type JobCampaign = {
-  id: string
-  domain: string
-  city: string
-  customerName: string
-  customerPhone: string
-  description: string
-  status: string
-  statusLabel: string
-  candidateCount: number
-  dispatchedCount: number
-  initialBatchSize: number
-  dripIntervalSec: number
-  nextDripAt: string | null
-  claimedByAccountId: number | null
-  claimedByAccountName: string
-  claimedJobId: number | null
-  created: string
-  updated: string
 }
 
 export type Account = {
@@ -87,6 +69,7 @@ export type Account = {
   availability: string | null
   credits: number | null
   membershipPaid?: boolean | null
+  hasSavedPaymentMethod?: boolean
   password?: string | null
   createdAt: string
   updatedAt: string
@@ -350,35 +333,48 @@ export async function getJobsForAccount(accountId: number) {
   return csFetch<Job[]>(`/customer-service/jobs?${params.toString()}`)
 }
 
-export async function getJobCampaigns() {
-  return csFetch<JobCampaign[]>('/customer-service/job-campaigns')
-}
-
-export async function deleteJobCampaign(id: string) {
-  return csFetch<void>(`/customer-service/job-campaigns/${encodeURIComponent(id.trim())}`, {
-    method: 'DELETE',
-  })
-}
-
 export async function deleteJob(id: number) {
   return csFetch<void>(`/customer-service/jobs/${id}`, { method: 'DELETE' })
 }
 
-/** אישור החרגה: הפנייה עוברת ל«נדחה», סיבת ההחרגה ל«מאושר החרגה - …», והחזרת קרדיטים לבעל המקצוע כשנוכו בעת אישור הפנייה */
-export async function approveJobExclusion(jobId: number) {
+/** אישור החרגה: הפנייה עוברת ל«נדחה», exclusionApproved=true, והחזרת קרדיטים כשנוכו בעת אישור הפנייה */
+export async function approveJobExclusion(jobId: number, note?: string) {
   return csFetch<Job>(`/customer-service/jobs/${jobId}/approve-exclusion`, {
     method: 'POST',
+    body: { note: note?.trim() || undefined },
   })
 }
 
-/** דחיית החרגה: הפנייה חוזרת ל«ללא החרגות» (ללא שינוי סטטוס) */
-export async function rejectJobExclusion(jobId: number) {
+/** דחיית החרגה: exclusionApproved=false (ללא שינוי סטטוס) */
+export async function rejectJobExclusion(jobId: number, note?: string) {
   return csFetch<Job>(`/customer-service/jobs/${jobId}/reject-exclusion`, {
     method: 'POST',
+    body: { note: note?.trim() || undefined },
   })
 }
 
-/** וובהוק ציבורי: יוצר פניות לכל ה־accounts שמתאימים לתחום ולעיר */
+export type LeaveInquiryPreview = {
+  willCharge: boolean
+  willAssign: boolean
+  assignedAccountId: number | null
+  assignedAccountName: string | null
+  leadPriceIls: number | null
+  eligibleCount: number
+  summaryHe: string
+}
+
+/** תצוגה מקדימה ל«השארת פנייה» — האם תהיה הקצאה וחיוב */
+export async function previewLeaveInquiry(body: { domain: string; city: string }) {
+  return csFetch<LeaveInquiryPreview>('/customer-service/jobs/preview-leave-inquiry', {
+    method: 'POST',
+    body: {
+      domain: body.domain.trim(),
+      city: body.city.trim(),
+    },
+  })
+}
+
+/** וובהוק ציבורי: יוצר פניות לבעל מקצוע אחד (תור + חיוב) */
 export async function broadcastInquiryByDomainAndCity(body: {
   domain: string
   city: string
@@ -499,6 +495,10 @@ export async function sendSupplierNotification(body: SendSupplierNotificationPay
 
 export async function deleteAccount(id: number) {
   return csFetch<void>(`/customer-service/accounts/${id}`, { method: 'DELETE' })
+}
+
+export async function deleteAccountSavedCard(id: number) {
+  return csFetch<Account>(`/customer-service/accounts/${id}/saved-card`, { method: 'DELETE' })
 }
 
 export type AccountInput = Partial<{
@@ -1198,6 +1198,29 @@ export async function patchMembershipFeeSettings(membershipFeeIls: number) {
     {
       method: 'PATCH',
       body: { membershipFeeIls },
+    },
+  )
+}
+
+export type AppMaintenanceSettings = {
+  enabled: boolean
+  message: string
+  updatedAt: string | null
+}
+
+export async function getAppMaintenanceSettings() {
+  return csFetch<AppMaintenanceSettings>('/customer-service/settings/app-maintenance')
+}
+
+export async function patchAppMaintenanceSettings(body: {
+  enabled?: boolean
+  message?: string
+}) {
+  return csFetch<{ enabled: boolean; message: string; updatedAt: string }>(
+    '/customer-service/settings/app-maintenance',
+    {
+      method: 'PATCH',
+      body,
     },
   )
 }

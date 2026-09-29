@@ -27,7 +27,7 @@ import {
 } from '@mui/material'
 import type { Account, City, Job, Service } from '../api/csApi'
 import type { AccountInput } from '../api/csApi'
-import { getJobsForAccount } from '../api/csApi'
+import { deleteAccountSavedCard, getJobsForAccount } from '../api/csApi'
 import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
 import {
   ACCOUNTS_DIALOG_ACCENT,
@@ -57,6 +57,7 @@ type Props = {
   onClose: () => void
   onSave: () => void | Promise<void>
   onDelete: () => void | Promise<void>
+  onAccountPatch?: (account: Account) => void
 }
 
 const Field = ({
@@ -130,17 +131,29 @@ export default function AccountEditDialog({
   onClose,
   onSave,
   onDelete,
+  onAccountPatch,
 }: Props) {
   const [tab, setTab] = useState<AccountTabKey>('phone')
   const [linkedJobs, setLinkedJobs] = useState<Job[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
+  const [hasSavedCard, setHasSavedCard] = useState(false)
+  const [clearingSavedCard, setClearingSavedCard] = useState(false)
+  const [savedCardError, setSavedCardError] = useState<string | null>(null)
   const isNew = account === 'new'
   const existingAccount: Account | null = account !== 'new' && account ? account : null
 
   useEffect(() => {
     if (open) setTab('phone')
   }, [open, existingAccount?.id])
+
+  useEffect(() => {
+    if (!open) {
+      setSavedCardError(null)
+      return
+    }
+    setHasSavedCard(existingAccount?.hasSavedPaymentMethod === true)
+  }, [open, existingAccount?.id, existingAccount?.hasSavedPaymentMethod])
 
   useEffect(() => {
     if (!open || tab !== 'jobs' || !existingAccount?.id) {
@@ -462,6 +475,54 @@ export default function AccountEditDialog({
             )}
             label={form.membershipPaid === true ? 'שולם' : 'לא שולם'}
           />
+        </Field>
+      ) : null}
+      {!isNew ? (
+        <Field label="כרטיס אשראי שמור">
+          <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.primary' }}>
+            {hasSavedCard ? 'יש כרטיס שמור במערכת' : 'אין כרטיס שמור'}
+          </Typography>
+          {hasSavedCard ? (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              sx={{ mt: 1.5 }}
+              disabled={saving || clearingSavedCard}
+              onClick={() => {
+                if (!existingAccount?.id) return
+                if (
+                  !window.confirm(
+                    'למחוק את כרטיס האשראי השמור של הספק? לא ניתן לחייב לידים עד שישמור כרטיס חדש.',
+                  )
+                ) {
+                  return
+                }
+                setSavedCardError(null)
+                setClearingSavedCard(true)
+                void deleteAccountSavedCard(existingAccount.id)
+                  .then((updated) => {
+                    setHasSavedCard(false)
+                    onAccountPatch?.(updated)
+                  })
+                  .catch((e: unknown) => {
+                    setSavedCardError(
+                      e instanceof Error ? e.message : 'מחיקת הכרטיס השמור נכשלה',
+                    )
+                  })
+                  .finally(() => {
+                    setClearingSavedCard(false)
+                  })
+              }}
+            >
+              {clearingSavedCard ? <CircularProgress size={18} color="inherit" /> : 'מחק כרטיס שמור'}
+            </Button>
+          ) : null}
+          {savedCardError ? (
+            <Typography sx={{ mt: 1, fontSize: 13, color: 'error.main' }}>
+              {savedCardError}
+            </Typography>
+          ) : null}
         </Field>
       ) : null}
       <Field label="טלפון (תצוגה)">

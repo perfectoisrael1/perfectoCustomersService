@@ -41,15 +41,14 @@ import {
   approveJobExclusion,
   broadcastInquiryByDomainAndCity,
   deleteJob,
-  deleteJobCampaign,
   getCities,
-  getJobCampaigns,
   getJobs,
   getServices,
+  previewLeaveInquiry,
   rejectJobExclusion,
   type City,
   type Job,
-  type JobCampaign,
+  type LeaveInquiryPreview,
   type Service,
 } from '../api/csApi'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
@@ -77,18 +76,6 @@ type JobsTab =
   | 'follow-up'
   | 'search'
   | 'leave'
-  | 'campaigns'
-
-type CampaignSortColumn =
-  | 'id'
-  | 'domain'
-  | 'city'
-  | 'customerName'
-  | 'statusLabel'
-  | 'dispatched'
-  | 'nextDripAt'
-  | 'claimedByAccountName'
-  | 'created'
 
 /** עמודות מיון לטבלת פניות (תואם עמודות תצוגה) */
 type JobsSortColumn =
@@ -193,15 +180,7 @@ const VALID_SEGMENTS: JobsTab[] = [
   'follow-up',
   'search',
   'leave',
-  'campaigns',
 ]
-
-const CAMPAIGN_STATUS_CHIP: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
-  active: 'info',
-  claimed: 'success',
-  exhausted: 'warning',
-  unassigned: 'default',
-}
 
 function segmentToTab(segment: string | undefined): JobsTab {
   const s = String(segment || '').trim()
@@ -212,10 +191,20 @@ function tabToPath(tab: JobsTab): string {
   return `/jobs/${tab}`
 }
 
-/** החרגה שעדיין לא אושרה במשרד (לא «מאושר החרגה - …») */
-function isPendingExclusion(exclusionReason: string | undefined | null): boolean {
-  const e = String(exclusionReason || '').trim()
+function normalizeExclusionApproved(
+  value: boolean | number | string | null | undefined,
+): boolean | null {
+  if (value === true || value === 1 || value === '1') return true
+  if (value === false || value === 0 || value === '0') return false
+  return null
+}
+
+/** החרגה שעדיין לא טופלה במשרד */
+function isPendingExclusion(job: Pick<Job, 'exclusionReason' | 'exclusionApproved'>): boolean {
+  const e = String(job.exclusionReason || '').trim()
   if (!e || e === 'ללא החרגות') return false
+  const approved = normalizeExclusionApproved(job.exclusionApproved)
+  if (approved === true || approved === false) return false
   return !e.startsWith('מאושר החרגה')
 }
 
@@ -328,13 +317,12 @@ const autocompleteTextFieldSx = {
 }
 
 function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
-  if (tab === 'campaigns') return []
   if (tab === 'today') return all.filter((r) => isCreatedTodayJerusalem(r.created))
   if (tab === 'exceptions') {
     return all.filter((r) => {
       // כל פנייה עם החרגה ממתינה (לא מוגבל ל«שליחויות» — בפרפקטו התחום הוא לרוב שם מקצוע/שירות)
       const status = String(r.statusLabel || '').trim()
-      return status !== 'לא נספר' && isPendingExclusion(r.exclusionReason)
+      return status !== 'לא נספר' && isPendingExclusion(r)
     })
   }
   if (tab === 'unassigned') return all.filter(isUnassignedJob)
@@ -350,13 +338,17 @@ export default function JobsPage() {
   const tab = segmentToTab(segment)
 
   const [allJobs, setAllJobs] = useState<Job[]>([])
-  const [allCampaigns, setAllCampaigns] = useState<JobCampaign[]>([])
   const [loading, setLoading] = useState(true)
-  const [campaignsLoading, setCampaignsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<Job | null>(null)
   const [exceptionsBusyJobId, setExceptionsBusyJobId] = useState<number | null>(null)
+  const [exclusionDecisionDraft, setExclusionDecisionDraft] = useState<{
+    job: Job
+    mode: 'approve' | 'reject'
+    note: string
+  } | null>(null)
+  const [exclusionDecisionNoteError, setExclusionDecisionNoteError] = useState(false)
   const [broadcastDraft, setBroadcastDraft] = useState<{
     job: Job
     domain: string
@@ -370,17 +362,9 @@ export default function JobsPage() {
     col: 'created',
     dir: 'desc',
   })
-  const [campaignSort, setCampaignSort] = useState<{
-    col: CampaignSortColumn
-    dir: 'asc' | 'desc'
-  }>({
-    col: 'created',
-    dir: 'desc',
-  })
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
   const rowSelection = useCsTableSelection()
-  const campaignRowSelection = useCsTableSelection()
 
   const [leaveDomain, setLeaveDomain] = useState('')
   const [leaveCity, setLeaveCity] = useState('')
@@ -388,6 +372,9 @@ export default function JobsPage() {
   const [leaveCustomerName, setLeaveCustomerName] = useState('')
   const [leaveDescription, setLeaveDescription] = useState('')
   const [leaveSubmitting, setLeaveSubmitting] = useState(false)
+  const [leavePreviewLoading, setLeavePreviewLoading] = useState(false)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
+  const [leavePreview, setLeavePreview] = useState<LeaveInquiryPreview | null>(null)
 
   const [catalogServices, setCatalogServices] = useState<Service[]>([])
   const [catalogCities, setCatalogCities] = useState<City[]>([])
@@ -449,19 +436,6 @@ export default function JobsPage() {
     }
   }, [tab])
 
-  const loadCampaigns = useCallback(async (opts?: { silent?: boolean }) => {
-    const silent = opts?.silent === true
-    if (!silent) setCampaignsLoading(true)
-    setError(null)
-    try {
-      setAllCampaigns(await getJobCampaigns())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה בטעינת קמפיינים')
-    } finally {
-      if (!silent) setCampaignsLoading(false)
-    }
-  }, [])
-
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true
     if (!silent) setLoading(true)
@@ -475,41 +449,50 @@ export default function JobsPage() {
     }
   }, [])
 
-  const onApproveExclusion = useCallback(
-    async (job: Job, e: MouseEvent) => {
+  const openExclusionDecision = useCallback(
+    (job: Job, mode: 'approve' | 'reject', e: MouseEvent) => {
       e.stopPropagation()
-      setExceptionsBusyJobId(job.id)
-      setError(null)
-      try {
-        await approveJobExclusion(job.id)
-        await load({ silent: true })
-        setDetail((d) => (d?.id === job.id ? null : d))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'שגיאה באישור ההחרגה')
-      } finally {
-        setExceptionsBusyJobId(null)
-      }
+      setExclusionDecisionNoteError(false)
+      setExclusionDecisionDraft({ job, mode, note: '' })
     },
-    [load],
+    [],
   )
 
-  const onRejectExclusion = useCallback(
-    async (job: Job, e: MouseEvent) => {
-      e.stopPropagation()
-      setExceptionsBusyJobId(job.id)
-      setError(null)
-      try {
-        await rejectJobExclusion(job.id)
-        await load({ silent: true })
-        setDetail((d) => (d?.id === job.id ? null : d))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'שגיאה בדחיית ההחרגה')
-      } finally {
-        setExceptionsBusyJobId(null)
+  const exclusionDecisionNoteTrimmed = exclusionDecisionDraft?.note.trim() ?? ''
+
+  const submitExclusionDecision = useCallback(async () => {
+    if (!exclusionDecisionDraft) return
+    const { job, mode, note } = exclusionDecisionDraft
+    const trimmedNote = note.trim()
+    if (mode === 'reject' && !trimmedNote) {
+      setExclusionDecisionNoteError(true)
+      return
+    }
+    setExclusionDecisionNoteError(false)
+    setExceptionsBusyJobId(job.id)
+    setError(null)
+    try {
+      if (mode === 'approve') {
+        await approveJobExclusion(job.id, trimmedNote || undefined)
+      } else {
+        await rejectJobExclusion(job.id, trimmedNote)
       }
-    },
-    [load],
-  )
+      await load({ silent: true })
+      setDetail((d) => (d?.id === job.id ? null : d))
+      setExclusionDecisionDraft(null)
+      setExclusionDecisionNoteError(false)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : mode === 'approve'
+            ? 'שגיאה באישור ההחרגה'
+            : 'שגיאה בדחיית ההחרגה',
+      )
+    } finally {
+      setExceptionsBusyJobId(null)
+    }
+  }, [exclusionDecisionDraft, load])
 
   const openBroadcastDialog = useCallback((job: Job) => {
     const parsed = parseDomainCityFromDescription(job.description)
@@ -563,6 +546,8 @@ export default function JobsPage() {
         phone: leavePhone.trim() || undefined,
         customerName: leaveCustomerName.trim() || undefined,
       })
+      setLeaveConfirmOpen(false)
+      setLeavePreview(null)
       setSuccessMessage(formatBroadcastSuccessMessage(res))
       void load({ silent: true })
     } catch (err) {
@@ -579,18 +564,30 @@ export default function JobsPage() {
     load,
   ])
 
-  useEffect(() => {
-    void loadCampaigns({ silent: true })
-    if (tab === 'campaigns') {
-      rowSelection.clearSelection()
-      void loadCampaigns()
-      return
+  const requestLeaveInquiryConfirm = useCallback(async () => {
+    const d = leaveDomain.trim()
+    const c = leaveCity.trim()
+    if (!d || !c) return
+    setLeavePreviewLoading(true)
+    setError(null)
+    try {
+      const preview = await previewLeaveInquiry({ domain: d, city: c })
+      setLeavePreview(preview)
+      setLeaveConfirmOpen(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בבדיקת ההקצאה')
+    } finally {
+      setLeavePreviewLoading(false)
     }
-    campaignRowSelection.clearSelection()
+  }, [leaveCity, leaveDomain])
+
+  useEffect(() => {
+    rowSelection.clearSelection()
     if (tab !== 'leave') {
       void load()
     }
-  }, [tab, load, loadCampaigns])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clear selection on tab change only
+  }, [tab, load])
 
   const setTab = (next: JobsTab) => {
     const path = tabToPath(next)
@@ -630,7 +627,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [tab, query, sort.col, sort.dir, campaignSort.col, campaignSort.dir])
+  }, [tab, query, sort.col, sort.dir])
 
   const sortedRows = useMemo(() => {
     const rows = [...filtered]
@@ -679,97 +676,8 @@ export default function JobsPage() {
       followUp: followUpRows.length,
       followUpDue: followUpRows.filter((r) => isJobFollowUpDue(r)).length,
       search: allJobs.length,
-      campaigns: allCampaigns.length,
     }
-  }, [allJobs, allCampaigns])
-
-  const filteredCampaigns = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return allCampaigns
-    return allCampaigns.filter((c) => {
-      const blob = [
-        c.id,
-        c.domain,
-        c.city,
-        c.customerName,
-        c.customerPhone,
-        c.description,
-        c.statusLabel,
-        c.claimedByAccountName,
-        c.claimedJobId,
-      ]
-        .map((x) => String(x ?? '').toLowerCase())
-        .join(' ')
-      const digits = q.replace(/\D/g, '')
-      const phone = String(c.customerPhone || '').replace(/\D/g, '')
-      return blob.includes(q) || (digits.length > 0 && phone.includes(digits))
-    })
-  }, [allCampaigns, query])
-
-  const sortedCampaigns = useMemo(() => {
-    const rows = [...filteredCampaigns]
-    const { col, dir } = campaignSort
-    rows.sort((a, b) => {
-      let av: string | number = ''
-      let bv: string | number = ''
-      if (col === 'dispatched') {
-        av = a.dispatchedCount
-        bv = b.dispatchedCount
-      } else if (col === 'id') {
-        av = a.id
-        bv = b.id
-      } else {
-        av = String(a[col] ?? '').trim()
-        bv = String(b[col] ?? '').trim()
-      }
-      if (typeof av === 'number' && typeof bv === 'number') {
-        return dir === 'asc' ? av - bv : bv - av
-      }
-      const cmp = String(av).localeCompare(String(bv), 'he')
-      return dir === 'asc' ? cmp : -cmp
-    })
-    return rows
-  }, [filteredCampaigns, campaignSort])
-
-  const campaignDisplayRows = useMemo(
-    () =>
-      prependSelectedNotInList(
-        sortedCampaigns,
-        allCampaigns,
-        campaignRowSelection.selectedIds,
-        (r) => r.id,
-      ),
-    [sortedCampaigns, allCampaigns, campaignRowSelection.selectedIds],
-  )
-
-  const campaignPageRows = useMemo(() => {
-    const start = page * rowsPerPage
-    return campaignDisplayRows.slice(start, start + rowsPerPage)
-  }, [campaignDisplayRows, page, rowsPerPage])
-
-  const onSortCampaignColumn = useCallback((col: CampaignSortColumn) => {
-    setCampaignSort((prev) =>
-      prev.col === col
-        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: col === 'created' || col === 'dispatched' ? 'desc' : 'asc' },
-    )
-  }, [])
-
-  const bulkDeleteCampaigns = useCallback(async () => {
-    setError(null)
-    const ids = campaignRowSelection.selectedIds
-    try {
-      for (const rawId of Array.from(ids)) {
-        const id = String(rawId ?? '').trim()
-        if (id) await deleteJobCampaign(id)
-      }
-      campaignRowSelection.clearSelection()
-      await Promise.all([loadCampaigns({ silent: true }), load({ silent: true })])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה במחיקת קמפיינים')
-      throw err
-    }
-  }, [load, loadCampaigns, campaignRowSelection])
+  }, [allJobs])
 
   const removeDetailJob = async () => {
     if (!detail) return
@@ -870,7 +778,6 @@ export default function JobsPage() {
                   />
                   <Tab value="search" label={`כל הפניות (${counts.search})`} />
                   <Tab value="leave" label="השארת פנייה" />
-                  <Tab value="campaigns" label={`קמפיינים (${counts.campaigns})`} />
                 </Tabs>
 
                 {tab === 'leave' ? null : (
@@ -928,9 +835,7 @@ export default function JobsPage() {
                     />
                     <Button
                       variant="contained"
-                      onClick={() =>
-                        void (tab === 'campaigns' ? loadCampaigns() : load())
-                      }
+                      onClick={() => void load()}
                       sx={{
                         backgroundColor: '#1565c0',
                         color: '#fff',
@@ -1042,12 +947,13 @@ export default function JobsPage() {
                     variant="contained"
                     disabled={
                       leaveSubmitting ||
+                      leavePreviewLoading ||
                       !leaveDomain.trim() ||
                       !leaveCity.trim()
                     }
-                    onClick={() => void submitLeaveInquiry()}
+                    onClick={() => void requestLeaveInquiryConfirm()}
                   >
-                    {leaveSubmitting ? (
+                    {leaveSubmitting || leavePreviewLoading ? (
                       <CircularProgress size={22} color="inherit" />
                     ) : (
                       'יצירה'
@@ -1055,186 +961,6 @@ export default function JobsPage() {
                   </Button>
                 </Box>
               </Stack>
-            ) : tab === 'campaigns' ? (
-              campaignsLoading ? (
-                <Box
-                  sx={{
-                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
-                    py: 8,
-                    display: 'flex',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <CircularProgress color="primary" />
-                </Box>
-              ) : (
-                <Box
-                  sx={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    mt: `${GAP_BELOW_INNER_NAV_PX}px`,
-                  }}
-                >
-                  <Box sx={csPagedTableOuterBoxSx(theme)}>
-                    <CsTableContainer sx={csTableInnerPagedScrollSx}>
-                      <Table stickyHeader size="small" dir="rtl" sx={csDataTableSx(theme)}>
-                        <TableHead>
-                          <TableRow>
-                            <CsTableSelectAllHeaderCell
-                              pageRows={campaignPageRows}
-                              selectedIds={campaignRowSelection.selectedIds}
-                              onTogglePage={() =>
-                                campaignRowSelection.toggleAllOnPage(campaignPageRows)
-                              }
-                            />
-                            <TableCell sortDirection={campaignSort.col === 'id' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'id'}
-                                direction={campaignSort.col === 'id' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('id')}
-                              >
-                                מזהה
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'domain' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'domain'}
-                                direction={campaignSort.col === 'domain' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('domain')}
-                              >
-                                תחום
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'city' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'city'}
-                                direction={campaignSort.col === 'city' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('city')}
-                              >
-                                עיר
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'customerName' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'customerName'}
-                                direction={campaignSort.col === 'customerName' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('customerName')}
-                              >
-                                לקוח
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell>טלפון</TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'statusLabel' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'statusLabel'}
-                                direction={campaignSort.col === 'statusLabel' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('statusLabel')}
-                              >
-                                סטטוס
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'dispatched' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'dispatched'}
-                                direction={campaignSort.col === 'dispatched' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('dispatched')}
-                              >
-                                נשלחו
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'nextDripAt' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'nextDripAt'}
-                                direction={campaignSort.col === 'nextDripAt' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('nextDripAt')}
-                              >
-                                drip הבא
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'claimedByAccountName' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'claimedByAccountName'}
-                                direction={campaignSort.col === 'claimedByAccountName' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('claimedByAccountName')}
-                              >
-                                נלקח על ידי
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell>פנייה #</TableCell>
-                            <TableCell sortDirection={campaignSort.col === 'created' ? campaignSort.dir : false}>
-                              <TableSortLabel
-                                active={campaignSort.col === 'created'}
-                                direction={campaignSort.col === 'created' ? campaignSort.dir : 'asc'}
-                                onClick={() => onSortCampaignColumn('created')}
-                              >
-                                נוצר
-                              </TableSortLabel>
-                            </TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {campaignPageRows.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  אין קמפיינים להצגה
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            campaignPageRows.map((c) => (
-                              <TableRow key={c.id} hover selected={campaignRowSelection.isSelected(c.id)}>
-                                <CsTableRowCheckboxCell
-                                  rowId={c.id}
-                                  selected={campaignRowSelection.isSelected(c.id)}
-                                  onToggle={campaignRowSelection.toggleRow}
-                                />
-                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                                  {c.id.slice(0, 8)}…
-                                </TableCell>
-                                <TableCell>{c.domain || '—'}</TableCell>
-                                <TableCell>{c.city || '—'}</TableCell>
-                                <TableCell>{c.customerName || '—'}</TableCell>
-                                <TableCell dir="ltr" sx={{ textAlign: 'right' }}>
-                                  {formatCsPhoneDisplay(c.customerPhone) || '—'}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    size="small"
-                                    label={c.statusLabel}
-                                    color={CAMPAIGN_STATUS_CHIP[c.status] ?? 'default'}
-                                    variant="outlined"
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  {c.dispatchedCount}/{c.candidateCount}
-                                </TableCell>
-                                <TableCell>{formatCsDateTime(c.nextDripAt)}</TableCell>
-                                <TableCell>{c.claimedByAccountName || '—'}</TableCell>
-                                <TableCell>{c.claimedJobId ?? '—'}</TableCell>
-                                <TableCell>{formatCsDateTime(c.created)}</TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </CsTableContainer>
-                    <CsTablePaginationFooter
-                      rowsPerPageOptions={[10, 25, 50, 100]}
-                      count={campaignDisplayRows.length}
-                      rowsPerPage={rowsPerPage}
-                      page={page}
-                      onPageChange={(_e, next) => setPage(next)}
-                      onRowsPerPageChange={(e) => {
-                        setRowsPerPage(Number.parseInt(e.target.value, 10))
-                        setPage(0)
-                      }}
-                    />
-                  </Box>
-                </Box>
-              )
             ) : loading ? (
               <Box
                 sx={{
@@ -1517,7 +1243,7 @@ export default function JobsPage() {
                                   variant="contained"
                                   color="success"
                                   disabled={exceptionsBusyJobId === row.id}
-                                  onClick={(e) => void onApproveExclusion(row, e)}
+                                  onClick={(e) => openExclusionDecision(row, 'approve', e)}
                                 >
                                   {exceptionsBusyJobId === row.id ? (
                                     <CircularProgress size={18} color="inherit" />
@@ -1530,7 +1256,7 @@ export default function JobsPage() {
                                   variant="outlined"
                                   color="error"
                                   disabled={exceptionsBusyJobId === row.id}
-                                  onClick={(e) => void onRejectExclusion(row, e)}
+                                  onClick={(e) => openExclusionDecision(row, 'reject', e)}
                                 >
                                   לא מאשר
                                 </Button>
@@ -1628,6 +1354,20 @@ export default function JobsPage() {
               ) : null}
               <Typography><strong>סטטוס:</strong> {detail.statusLabel}</Typography>
               <Typography><strong>החרגות:</strong> {detail.exclusionReason || '—'}</Typography>
+              {(() => {
+                const approved = normalizeExclusionApproved(detail.exclusionApproved)
+                return approved === true || approved === false
+              })() ? (
+                <Typography sx={{ whiteSpace: 'pre-line' }}>
+                  <strong>שירות לקוחות:</strong>{' '}
+                  {normalizeExclusionApproved(detail.exclusionApproved) === true
+                    ? 'מאושר החרגה והיתרה זוכתה בעלות הליד'
+                    : 'לא מאושר החרגה'}
+                  {detail.exclusionDecisionNote
+                    ? `\n${detail.exclusionDecisionNote}`
+                    : ''}
+                </Typography>
+              ) : null}
               {detail.followUpStatus ? (
                 <>
                   <Typography>
@@ -1653,6 +1393,138 @@ export default function JobsPage() {
             </Stack>
           ) : null}
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!exclusionDecisionDraft}
+        onClose={() => {
+          if (exceptionsBusyJobId != null) return
+          setExclusionDecisionDraft(null)
+          setExclusionDecisionNoteError(false)
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {exclusionDecisionDraft?.mode === 'approve' ? 'אישור החרגה' : 'דחיית החרגה'}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              פנייה #{exclusionDecisionDraft?.job.id ?? ''}
+              {exclusionDecisionDraft?.job.exclusionReason
+                ? ` — ${exclusionDecisionDraft.job.exclusionReason}`
+                : ''}
+            </Typography>
+            {exclusionDecisionDraft?.mode === 'approve' ? (
+              <Typography variant="body2">
+                לאשר את ההחרגה? הפנייה תועבר ל«נדחה» והיתרה תזוכה בעלות הליד (אם רלוונטי).
+              </Typography>
+            ) : (
+              <TextField
+                label="למה לא אושר *"
+                value={exclusionDecisionDraft?.note ?? ''}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setExclusionDecisionDraft((prev) =>
+                    prev ? { ...prev, note: next } : prev,
+                  )
+                  if (next.trim()) setExclusionDecisionNoteError(false)
+                }}
+                multiline
+                minRows={3}
+                fullWidth
+                required
+                error={exclusionDecisionNoteError}
+                helperText={
+                  exclusionDecisionNoteError
+                    ? 'חובה למלא הסבר לפני דחיית ההחרגה'
+                    : ' '
+                }
+                slotProps={{ htmlInput: { dir: 'rtl', style: { textAlign: 'right' } } }}
+              />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => {
+              setExclusionDecisionDraft(null)
+              setExclusionDecisionNoteError(false)
+            }}
+            disabled={exceptionsBusyJobId != null}
+          >
+            ביטול
+          </Button>
+          <Button
+            variant="contained"
+            color={exclusionDecisionDraft?.mode === 'approve' ? 'success' : 'error'}
+            disabled={
+              exceptionsBusyJobId != null ||
+              (exclusionDecisionDraft?.mode === 'reject' && !exclusionDecisionNoteTrimmed)
+            }
+            onClick={() => void submitExclusionDecision()}
+          >
+            {exceptionsBusyJobId != null ? (
+              <CircularProgress size={22} color="inherit" />
+            ) : exclusionDecisionDraft?.mode === 'approve' ? (
+              'אישור'
+            ) : (
+              'לא מאשר'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={leaveConfirmOpen}
+        onClose={() => {
+          if (leaveSubmitting) return
+          setLeaveConfirmOpen(false)
+          setLeavePreview(null)
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>אישור יצירת פנייה</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {leavePreview ? (
+              <>
+                <Alert severity={leavePreview.willCharge ? 'warning' : 'info'}>
+                  {leavePreview.summaryHe}
+                </Alert>
+                {leavePreview.eligibleCount > 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    מועמדים פעילים בתור: {leavePreview.eligibleCount.toLocaleString('he-IL')}
+                  </Typography>
+                ) : null}
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                טוען תצוגה מקדימה…
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => {
+              setLeaveConfirmOpen(false)
+              setLeavePreview(null)
+            }}
+            disabled={leaveSubmitting}
+          >
+            ביטול
+          </Button>
+          <Button
+            variant="contained"
+            disabled={leaveSubmitting || !leavePreview}
+            onClick={() => void submitLeaveInquiry()}
+          >
+            {leaveSubmitting ? <CircularProgress size={22} color="inherit" /> : 'אישור ויצירה'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog
@@ -1749,27 +1621,15 @@ export default function JobsPage() {
       </Dialog>
 
       <CsTableSelectionBar
-        open={tab === 'campaigns' ? campaignRowSelection.selectedCount > 0 : rowSelection.selectedCount > 0}
-        selectedCount={
-          tab === 'campaigns' ? campaignRowSelection.selectedCount : rowSelection.selectedCount
-        }
-        onClear={
-          tab === 'campaigns' ? campaignRowSelection.clearSelection : rowSelection.clearSelection
-        }
+        open={rowSelection.selectedCount > 0}
+        selectedCount={rowSelection.selectedCount}
+        onClear={rowSelection.clearSelection}
       >
-        {tab === 'campaigns' ? (
-          <CsTableSelectionDeleteButton
-            selectedCount={campaignRowSelection.selectedCount}
-            entityLabel="קמפיינים"
-            onDelete={bulkDeleteCampaigns}
-          />
-        ) : (
-          <CsTableSelectionDeleteButton
-            selectedCount={rowSelection.selectedCount}
-            entityLabel="פניות"
-            onDelete={bulkDeleteSelected}
-          />
-        )}
+        <CsTableSelectionDeleteButton
+          selectedCount={rowSelection.selectedCount}
+          entityLabel="פניות"
+          onDelete={bulkDeleteSelected}
+        />
       </CsTableSelectionBar>
     </>
   )

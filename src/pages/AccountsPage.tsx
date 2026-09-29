@@ -81,6 +81,8 @@ function accountStatusChipColors(statusDisp: string): { bg: string; fg: string }
     'לא פעיל': '#1565C0',
     בהשעיה: '#BF360C',
     ממתין: '#827717',
+    'מעוניין למחוק חשבון': '#B71C1C',
+    מחוק: '#424242',
   }
   return { bg, fg: fgMap[s] || '#263238' }
 }
@@ -671,6 +673,10 @@ export default function AccountsPage() {
         onClose={() => !saving && setEditor(null)}
         onSave={() => void handleSave()}
         onDelete={() => void handleDelete()}
+        onAccountPatch={(updated) => {
+          setEditor(updated)
+          setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+        }}
       />
 
       <CsTableSelectionBar

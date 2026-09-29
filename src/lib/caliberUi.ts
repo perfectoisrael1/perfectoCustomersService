@@ -215,6 +215,7 @@ const PERFECTO_STATUS_HE: Record<string, string> = {
   suspended: 'בהשעיה',
   pending: 'ממתין',
   delete_requested: 'מעוניין למחוק חשבון',
+  removed: 'מחוק',
 }
 
 export function mapAccountStatusLabel(raw: string | null | undefined): string {
@@ -230,6 +231,7 @@ export const ACCOUNT_STATUS_CELL_BG: Record<string, string> = {
   בהשעיה: '#ffe0b2',
   ממתין: '#fff9c4',
   'מעוניין למחוק חשבון': '#ffcdd2',
+  מחוק: '#eeeeee',
 }
 
 export function accountStatusCellBg(statusDisplay: string | null | undefined): string | undefined {

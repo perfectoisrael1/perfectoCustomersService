@@ -30,6 +30,7 @@ import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
 import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
   GAP_BELOW_INNER_NAV_PX,
+  STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
 } from '../layout/headerLayout'
 import { getOutgoingCalls, type OutgoingCall } from '../api/csApi'
 import {
@@ -41,15 +42,30 @@ import {
 import BlacklistEntriesTab from '../components/BlacklistEntriesTab'
 import BlacklistAttemptsTab from '../components/BlacklistAttemptsTab'
 import MembershipFeeSettingsTab from '../components/MembershipFeeSettingsTab'
+import AppMaintenanceSettingsTab from '../components/AppMaintenanceSettingsTab'
 
-type GeneralTab = 'scheduled-lead-calls' | 'blacklist' | 'blacklist-attempts' | 'membership-fee'
+type GeneralTab =
+  | 'scheduled-lead-calls'
+  | 'blacklist'
+  | 'blacklist-attempts'
+  | 'membership-fee'
+  | 'app-maintenance'
 
 const GENERAL_TABS: GeneralTab[] = [
   'scheduled-lead-calls',
   'blacklist',
   'blacklist-attempts',
   'membership-fee',
+  'app-maintenance',
 ]
+
+const GENERAL_TAB_LABELS: Record<GeneralTab, string> = {
+  'scheduled-lead-calls': 'שיחות מתוזמנות',
+  blacklist: 'רשימה שחורה',
+  'blacklist-attempts': 'ניסיונות שנחסמו',
+  'membership-fee': 'דמי הקמה',
+  'app-maintenance': 'שיפוצים באפליקציה',
+}
 
 const STATUS_TABS: { id: OutgoingCallStatusFilter; label: string }[] = [
   { id: 'all', label: 'הכל' },
@@ -66,6 +82,7 @@ function segmentToTab(segment: string | undefined): GeneralTab {
   if (s === 'blacklist' || s === 'list') return 'blacklist'
   if (s === 'blacklist-attempts' || s === 'attempts') return 'blacklist-attempts'
   if (s === 'membership-fee' || s === 'setup-fee' || s === 'דמי-הקמה') return 'membership-fee'
+  if (s === 'app-maintenance' || s === 'maintenance' || s === 'שיפוצים') return 'app-maintenance'
   return 'scheduled-lead-calls'
 }
 
@@ -93,6 +110,10 @@ export default function GeneralPage() {
     }
   }, [segment, navigate])
 
+  const setTab = (next: GeneralTab) => {
+    if (next !== tab) navigate(tabToPath(next))
+  }
+
   return (
     <Box sx={{ mx: -2 }}>
       <Card
@@ -107,14 +128,46 @@ export default function GeneralPage() {
         }}
       >
         <CardContent
-          sx={{ px: 2, pb: 2, pt: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          sx={{ px: 2, pb: 2, pt: 0, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         >
           <Stack spacing={0} sx={{ flex: 1, minHeight: 0, direction: 'rtl', textAlign: 'right' }}>
+            <Box
+              sx={{
+                position: 'sticky',
+                top: STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS,
+                zIndex: (theme) => theme.zIndex.appBar - 1,
+                bgcolor: 'background.paper',
+                mx: -2,
+                px: 2,
+                py: 0,
+                borderBottom: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <Tabs
+                value={tab}
+                onChange={(_, value: GeneralTab) => setTab(value)}
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
+                sx={{ minHeight: 44 }}
+              >
+                {GENERAL_TABS.map((key) => (
+                  <Tab
+                    key={key}
+                    value={key}
+                    label={GENERAL_TAB_LABELS[key]}
+                    sx={{ minHeight: 44, fontWeight: tab === key ? 700 : 500 }}
+                  />
+                ))}
+              </Tabs>
+            </Box>
             <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               {tab === 'scheduled-lead-calls' ? <ScheduledLeadCallsTab /> : null}
               {tab === 'blacklist' ? <BlacklistEntriesTab /> : null}
               {tab === 'blacklist-attempts' ? <BlacklistAttemptsTab /> : null}
               {tab === 'membership-fee' ? <MembershipFeeSettingsTab /> : null}
+              {tab === 'app-maintenance' ? <AppMaintenanceSettingsTab /> : null}
             </Box>
           </Stack>
         </CardContent>

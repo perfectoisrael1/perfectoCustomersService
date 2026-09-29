@@ -735,6 +735,7 @@ export default function ComplaintsPage() {
         onClose={() => !accountSaving && setAccountEditor(null)}
         onSave={() => void handleAccountSave()}
         onDelete={() => void handleAccountDelete()}
+        onAccountPatch={(updated) => setAccountEditor(updated)}
       />
 
       <CsTableSelectionBar

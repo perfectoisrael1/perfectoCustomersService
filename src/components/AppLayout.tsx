@@ -64,6 +64,7 @@ const mainLinks: NavLink[] = [
       { to: '/general/blacklist', label: 'רשימה שחורה' },
       { to: '/general/blacklist-attempts', label: 'ניסיונות שנחסמו' },
       { to: '/general/membership-fee', label: 'דמי הקמה' },
+      { to: '/general/app-maintenance', label: 'שיפוצים באפליקציה' },
     ],
   },
 ]
