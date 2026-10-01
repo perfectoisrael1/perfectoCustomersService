@@ -10,6 +10,7 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  MenuItem,
   Stack,
   Tab,
   Table,
@@ -62,7 +63,7 @@ import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
 } from '../layout/headerLayout'
 
-type AccountTab = 'customers' | 'today'
+type AccountTab = 'customers' | 'today' | 'credit'
 
 type AccountsSortColumn =
   | 'accountName'
@@ -71,6 +72,19 @@ type AccountsSortColumn =
   | 'status'
   | 'credits'
   | 'updatedAt'
+
+function accountMainCategories(raw: string | null | undefined): string[] {
+  return String(raw || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function accountHasMainCategory(raw: string | null | undefined, category: string): boolean {
+  const wanted = category.trim()
+  if (!wanted) return true
+  return accountMainCategories(raw).includes(wanted)
+}
 
 function accountStatusChipColors(statusDisp: string): { bg: string; fg: string } {
   const s = String(statusDisp || '').trim()
@@ -104,17 +118,18 @@ export default function AccountsPage() {
 
   useEffect(() => {
     const s = String(segment || '')
-    if (s && s !== 'businesses' && s !== 'today') {
+    if (s && s !== 'businesses' && s !== 'today' && s !== 'credit') {
       navigate('/accounts/businesses', { replace: true })
     }
   }, [segment, navigate])
 
-  const tab: AccountTab = segment === 'today' ? 'today' : 'customers'
+  const tab: AccountTab = segment === 'today' ? 'today' : segment === 'credit' ? 'credit' : 'customers'
 
   const [rows, setRows] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [creditCategory, setCreditCategory] = useState('')
   const [editor, setEditor] = useState<Account | 'new' | null>(null)
   const [form, setForm] = useState<AccountInput>({})
   const [saving, setSaving] = useState(false)
@@ -165,10 +180,30 @@ export default function AccountsPage() {
     }
   }, [])
 
+  const creditCategoryOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const service of catalogServices) {
+      const category = String(service.category || '').trim()
+      if (category) set.add(category)
+    }
+    for (const row of rows) {
+      if (row.hasSavedPaymentMethod !== true) continue
+      for (const category of accountMainCategories(row.specialtiesCategory)) set.add(category)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
+  }, [catalogServices, rows])
+
   const tabRows = useMemo(() => {
     if (tab === 'today') return rows.filter((r) => isCreatedTodayJerusalem(r.createdAt))
+    if (tab === 'credit') {
+      return rows.filter(
+        (r) =>
+          r.hasSavedPaymentMethod === true &&
+          accountHasMainCategory(r.specialtiesCategory, creditCategory),
+      )
+    }
     return rows
-  }, [rows, tab])
+  }, [rows, tab, creditCategory])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -192,7 +227,7 @@ export default function AccountsPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [tab, query, sort.col, sort.dir])
+  }, [tab, query, sort.col, sort.dir, creditCategory])
 
   const sortedRows = useMemo(() => {
     const list = [...filtered]
@@ -226,6 +261,7 @@ export default function AccountsPage() {
     () => ({
       customers: rows.length,
       today: rows.filter((r) => isCreatedTodayJerusalem(r.createdAt)).length,
+      credit: rows.filter((r) => r.hasSavedPaymentMethod === true).length,
     }),
     [rows],
   )
@@ -409,7 +445,13 @@ export default function AccountsPage() {
                       value={tab}
                       onChange={(_e, v) => {
                         const next = v as AccountTab
-                        navigate(next === 'today' ? '/accounts/today' : '/accounts/businesses')
+                        navigate(
+                          next === 'today'
+                            ? '/accounts/today'
+                            : next === 'credit'
+                              ? '/accounts/credit'
+                              : '/accounts/businesses',
+                        )
                       }}
                       variant="scrollable"
                       allowScrollButtonsMobile
@@ -423,6 +465,7 @@ export default function AccountsPage() {
                     >
                       <Tab value="customers" label={`כל הספקים (${counts.customers})`} />
                       <Tab value="today" label={`הצטרפויות היום (${counts.today})`} />
+                      <Tab value="credit" label={`רשימות אשראי (${counts.credit})`} />
                     </Tabs>
                   </Box>
 
@@ -435,6 +478,46 @@ export default function AccountsPage() {
                       flexWrap: 'nowrap',
                     }}
                   >
+                    {tab === 'credit' ? (
+                      <TextField
+                        select
+                        size="small"
+                        value={creditCategory}
+                        onChange={(e) => setCreditCategory(e.target.value)}
+                        slotProps={{
+                          select: {
+                            displayEmpty: true,
+                            renderValue: (value) => {
+                              const selected = String(value || '').trim()
+                              return selected || 'כל התחומים'
+                            },
+                          },
+                        }}
+                        sx={{
+                          width: { xs: 150, sm: 190 },
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 999,
+                            backgroundColor: 'background.paper',
+                            fontSize: 14,
+                            '& fieldset': { borderColor: 'rgba(0,0,0,0.18)' },
+                            '&:hover fieldset': { borderColor: 'rgba(0,0,0,0.35)' },
+                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                          },
+                          '& .MuiSelect-select': {
+                            textAlign: 'right',
+                            py: '7px',
+                            direction: 'rtl',
+                          },
+                        }}
+                      >
+                        <MenuItem value="">כל התחומים</MenuItem>
+                        {creditCategoryOptions.map((category) => (
+                          <MenuItem key={category} value={category}>
+                            {category}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : null}
                     <TextField
                       size="small"
                       value={query}
