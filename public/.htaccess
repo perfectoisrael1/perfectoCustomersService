@@ -12,6 +12,7 @@ RewriteRule ^personal-area/attendance/attendance$ /personal-area/attendance/atte
 RewriteRule ^dashboards/ppc/follow-ups-approved$ /dashboards/ppc/follow-ups-approved/ [L]
 RewriteRule ^general/scheduled-lead-calls$ /general/scheduled-lead-calls/ [L]
 RewriteRule ^dashboards/customer-service$ /dashboards/customer-service/ [L]
+RewriteRule ^dashboards/ppc/no-supplier$ /dashboards/ppc/no-supplier/ [L]
 RewriteRule ^general/blacklist-attempts$ /general/blacklist-attempts/ [L]
 RewriteRule ^personal-area/availability$ /personal-area/availability/ [L]
 RewriteRule ^dashboards/ppc/follow-ups$ /dashboards/ppc/follow-ups/ [L]

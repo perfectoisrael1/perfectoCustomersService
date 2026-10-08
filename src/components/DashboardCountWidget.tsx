@@ -8,6 +8,8 @@ type DashboardCountWidgetProps = {
   icon?: ReactNode
   accentColor?: string
   valueFormatter?: (value: number) => string
+  /** טקסט מוכן במקום המספר, למשל 12 / 3 */
+  displayValue?: string | null
   /** כרטיס מלבני רחב עם תוכן ממורכז */
   layout?: 'stack' | 'bar'
   onClick?: () => void
@@ -20,12 +22,19 @@ export default function DashboardCountWidget({
   icon,
   accentColor = '#111',
   valueFormatter,
+  displayValue,
   layout = 'stack',
   onClick,
 }: DashboardCountWidgetProps) {
   const isBar = layout === 'bar'
   const formatted =
-    value != null ? (valueFormatter ? valueFormatter(value) : value.toLocaleString('he-IL')) : '—'
+    displayValue != null
+      ? displayValue
+      : value != null
+        ? valueFormatter
+          ? valueFormatter(value)
+          : value.toLocaleString('he-IL')
+        : '—'
 
   return (
     <Card

@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn'
 import CampaignIcon from '@mui/icons-material/Campaign'
+import PersonOffIcon from '@mui/icons-material/PersonOff'
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback'
 import TaskAltIcon from '@mui/icons-material/TaskAlt'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
@@ -53,6 +54,7 @@ const KIND_TITLE: Record<PpcDashboardKind, string> = {
   profit: 'שורת רווח — פניות ששולמו',
   ppcLeads: 'לידים שהגיעו מ-PPC',
   ppcApproved: 'נסגרו בסטטוס מאושר',
+  ppcNoSupplier: 'התקבלו / לא היה ספק',
   followUpsCreated: 'פולואפים שנוצרו ממומן',
   followUpsApproved: 'פולואפים שנסגרו ממומן',
 }
@@ -210,6 +212,14 @@ export default function PpcDashboardWidgets({
           icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
           accentColor="#1565c0"
           onClick={loading ? undefined : () => go('ppcApproved')}
+        />
+        <DashboardCountWidget
+          title={KIND_TITLE.ppcNoSupplier}
+          value={loading ? null : summary.ppcNoSupplier}
+          loading={loading}
+          icon={<PersonOffIcon sx={{ fontSize: 28 }} />}
+          accentColor="#c62828"
+          onClick={loading ? undefined : () => go('ppcNoSupplier')}
         />
         <DashboardCountWidget
           title={KIND_TITLE.followUpsCreated}

@@ -47,7 +47,7 @@ import {
 } from '../components/CsTableSelection'
 import { prependSelectedNotInList } from '../lib/csTableListHelpers'
 
-type BreakdownRow = { label: string; count: number }
+type BreakdownRow = { label: string; count: number; availableCount: number }
 
 const DOMAIN_PICKER_ANCHOR = 'אינסטלציה'
 const DOMAIN_PICKER_SUGGESTION_COUNT = 5
@@ -102,7 +102,17 @@ function uniqueCatalogCities(rows: City[]): string[] {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'he'))
 }
 
-type SuppliersPopup = { domain: string; city: string }
+type SuppliersPopup = { domain: string; city: string; availableOnly: boolean }
+
+function hasSavedCard(account: Account): boolean {
+  return account.hasSavedPaymentMethod === true
+}
+
+/** 1 = זמין לפי שעות, 3 = הפעלה ידנית. */
+function isAvailableNow(account: Account): boolean {
+  const n = Number(account.availability)
+  return n === 1 || n === 3
+}
 
 const countCellClickableSx = {
   cursor: 'pointer',
@@ -112,20 +122,14 @@ const countCellClickableSx = {
   '&:hover': { opacity: 0.85 },
 } as const
 
-function countSuppliersInCityAndDomain(
-  accounts: Account[],
-  city: string,
-  domain: string,
-): number {
-  return accounts.filter((a) => accountMatchesCityAndDomain(a, city, domain)).length
-}
-
 function suppliersInCityAndDomain(
   accounts: Account[],
   city: string,
   domain: string,
 ): Account[] {
-  return accounts.filter((a) => accountMatchesCityAndDomain(a, city, domain))
+  return accounts.filter(
+    (a) => hasSavedCard(a) && accountMatchesCityAndDomain(a, city, domain),
+  )
 }
 
 function sortBreakdownRows(rows: BreakdownRow[]): BreakdownRow[] {
@@ -141,12 +145,14 @@ function BreakdownTable({
   emptyMessage,
   highlightMinCount,
   onCountClick,
+  onAvailableClick,
 }: {
   rows: BreakdownRow[]
   nameColumn: string
   emptyMessage: string
   highlightMinCount?: number
   onCountClick?: (city: string, count: number) => void
+  onAvailableClick?: (city: string, count: number) => void
 }) {
   const theme = useTheme()
   const rowSelection = useCsTableSelection({ getRowId: (row) => (row as BreakdownRow).label })
@@ -177,6 +183,7 @@ function BreakdownTable({
             />
             <TableCell>{nameColumn}</TableCell>
             <TableCell>מספר ספקים</TableCell>
+            <TableCell>זמינים כרגע</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -205,6 +212,17 @@ function BreakdownTable({
                 title={row.count > 0 && onCountClick ? 'הצג רשימת ספקים' : undefined}
               >
                 {row.count}
+              </TableCell>
+              <TableCell
+                onClick={
+                  row.availableCount > 0 && onAvailableClick
+                    ? () => onAvailableClick(row.label, row.availableCount)
+                    : undefined
+                }
+                sx={row.availableCount > 0 && onAvailableClick ? countCellClickableSx : undefined}
+                title={row.availableCount > 0 && onAvailableClick ? 'הצג ספקים זמינים' : undefined}
+              >
+                {row.availableCount}
               </TableCell>
             </TableRow>
             )
@@ -274,25 +292,33 @@ export default function CitiesPage() {
   const selectedDomainCityRows = useMemo((): BreakdownRow[] => {
     if (!selectedDomain) return []
     return sortBreakdownRows(
-      catalogCities.map((city) => ({
-        label: city,
-        count: countSuppliersInCityAndDomain(accounts, city, selectedDomain),
-      })),
+      catalogCities.map((city) => {
+        const matched = suppliersInCityAndDomain(accounts, city, selectedDomain)
+        return {
+          label: city,
+          count: matched.length,
+          availableCount: matched.filter(isAvailableNow).length,
+        }
+      }),
     )
   }, [selectedDomain, catalogCities, accounts])
 
   const selectedDomainTotalSuppliers = useMemo(() => {
     if (!selectedDomain) return 0
-    return accounts.filter((a) =>
-      accountMatchesDomain(a.specialties, a.specialtiesCategory, selectedDomain),
+    return accounts.filter(
+      (a) =>
+        hasSavedCard(a) &&
+        accountMatchesDomain(a.specialties, a.specialtiesCategory, selectedDomain),
     ).length
   }, [selectedDomain, accounts])
 
   const popupSuppliers = useMemo(() => {
     if (!suppliersPopup) return []
-    return suppliersInCityAndDomain(accounts, suppliersPopup.city, suppliersPopup.domain).sort(
-      (a, b) => String(a.accountName || '').localeCompare(String(b.accountName || ''), 'he'),
-    )
+    return suppliersInCityAndDomain(accounts, suppliersPopup.city, suppliersPopup.domain)
+      .filter((a) => !suppliersPopup.availableOnly || isAvailableNow(a))
+      .sort((a, b) =>
+        String(a.accountName || '').localeCompare(String(b.accountName || ''), 'he'),
+      )
   }, [suppliersPopup, accounts])
 
   const popupRowSelection = useCsTableSelection()
@@ -310,7 +336,15 @@ export default function CitiesPage() {
   const handleCountClick = useCallback(
     (city: string, _count: number) => {
       if (!selectedDomain) return
-      setSuppliersPopup({ domain: selectedDomain, city })
+      setSuppliersPopup({ domain: selectedDomain, city, availableOnly: false })
+    },
+    [selectedDomain],
+  )
+
+  const handleAvailableClick = useCallback(
+    (city: string, _count: number) => {
+      if (!selectedDomain) return
+      setSuppliersPopup({ domain: selectedDomain, city, availableOnly: true })
     },
     [selectedDomain],
   )
@@ -356,6 +390,7 @@ export default function CitiesPage() {
                 emptyMessage="אין ערים ברשימה"
                 highlightMinCount={SUPPLIER_ROW_HIGHLIGHT_MIN}
                 onCountClick={handleCountClick}
+                onAvailableClick={handleAvailableClick}
               />
             </Box>
           ) : (
@@ -384,7 +419,7 @@ export default function CitiesPage() {
         >
           <Typography component="span" sx={{ fontWeight: 800, fontSize: 18 }}>
             {suppliersPopup
-              ? `ספקים · ${suppliersPopup.domain} · ${suppliersPopup.city} (${popupSuppliers.length})`
+              ? `${suppliersPopup.availableOnly ? 'זמינים כרגע' : 'ספקים'} · ${suppliersPopup.domain} · ${suppliersPopup.city} (${popupSuppliers.length})`
               : 'ספקים'}
           </Typography>
           <IconButton aria-label="סגירה" onClick={() => setSuppliersPopup(null)} size="small">

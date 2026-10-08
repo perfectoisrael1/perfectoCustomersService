@@ -7,6 +7,7 @@ export const PPC_KIND_SLUGS: Record<PpcDashboardKind, string> = {
   profit: 'profit',
   ppcLeads: 'leads',
   ppcApproved: 'approved',
+  ppcNoSupplier: 'no-supplier',
   followUpsCreated: 'follow-ups',
   followUpsApproved: 'follow-ups-approved',
 }
@@ -15,6 +16,7 @@ export const PPC_KIND_PATHS: Record<PpcDashboardKind, string> = {
   profit: '/dashboards/ppc/profit',
   ppcLeads: '/dashboards/ppc/leads',
   ppcApproved: '/dashboards/ppc/approved',
+  ppcNoSupplier: '/dashboards/ppc/no-supplier',
   followUpsCreated: '/dashboards/ppc/follow-ups',
   followUpsApproved: '/dashboards/ppc/follow-ups-approved',
 }

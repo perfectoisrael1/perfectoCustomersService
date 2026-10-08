@@ -302,6 +302,7 @@ export type PpcDashboardKind =
   | 'profit'
   | 'ppcLeads'
   | 'ppcApproved'
+  | 'ppcNoSupplier'
   | 'followUpsCreated'
   | 'followUpsApproved'
 
@@ -310,6 +311,7 @@ export type PpcDashboardRows = Record<PpcDashboardKind, Job[]>
 export type PpcDashboardSummary = {
   ppcLeads: number
   ppcApproved: number
+  ppcNoSupplier: number
   followUpsCreated: number
   followUpsApproved: number
   profit: number

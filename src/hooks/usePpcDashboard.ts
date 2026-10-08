@@ -17,6 +17,7 @@ import { parsePpcPeriod } from '../lib/ppcDashboardRoutes'
 const EMPTY_ROWS: PpcDashboardRows = {
   ppcLeads: [],
   ppcApproved: [],
+  ppcNoSupplier: [],
   followUpsCreated: [],
   followUpsApproved: [],
   profit: [],
@@ -25,6 +26,7 @@ const EMPTY_ROWS: PpcDashboardRows = {
 const EMPTY_SUMMARY: PpcDashboardSummary = {
   ppcLeads: 0,
   ppcApproved: 0,
+  ppcNoSupplier: 0,
   followUpsCreated: 0,
   followUpsApproved: 0,
   profit: 0,
@@ -119,12 +121,14 @@ export function usePpcDashboard(enabled = true) {
       setSummary({
         ppcLeads: Number(data?.ppcLeads) || 0,
         ppcApproved: Number(data?.ppcApproved) || 0,
+        ppcNoSupplier: Number(data?.ppcNoSupplier) || 0,
         followUpsCreated: Number(data?.followUpsCreated) || 0,
         followUpsApproved: Number(data?.followUpsApproved) || 0,
         profit: Number(data?.profit) || 0,
         rows: {
           ppcLeads: asJobList(data?.rows?.ppcLeads),
           ppcApproved: asJobList(data?.rows?.ppcApproved),
+          ppcNoSupplier: asJobList(data?.rows?.ppcNoSupplier),
           followUpsCreated: asJobList(data?.rows?.followUpsCreated),
           followUpsApproved: asJobList(data?.rows?.followUpsApproved),
           profit: asJobList(data?.rows?.profit),

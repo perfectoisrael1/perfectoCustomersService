@@ -65,6 +65,13 @@ import {
 
 type AccountTab = 'customers' | 'today' | 'credit'
 
+/** חשבון שעדיין באמצע הרשמה באפליקציה — לא ספק. */
+const REGISTRATION_DRAFT_STATUS = 'registration_draft'
+
+function isFinishedSupplier(account: { accountStatus?: string | null }): boolean {
+  return String(account.accountStatus || '').trim() !== REGISTRATION_DRAFT_STATUS
+}
+
 type AccountsSortColumn =
   | 'accountName'
   | 'phoneNumber'
@@ -148,7 +155,8 @@ export default function AccountsPage() {
     setLoading(true)
     setError(null)
     try {
-      setRows(await getAccounts())
+      const all = await getAccounts()
+      setRows(all.filter(isFinishedSupplier))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת ספקים')
     } finally {
