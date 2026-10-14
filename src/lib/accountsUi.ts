@@ -107,6 +107,19 @@ function arrayContainsNeedle(items: string[], needle: string): boolean {
   return items.some((item) => scalarContainsNeedle(item, wanted))
 }
 
+function arrayEqualsToken(items: string[], needle: string): boolean {
+  const wanted = normalizeMatchToken(needle)
+  if (!wanted) return false
+  return items.some((item) => normalizeMatchToken(item) === wanted)
+}
+
+function scalarEqualsToken(raw: string | null | undefined, needle: string): boolean {
+  const haystack = normalizeMatchToken(raw ?? '')
+  const wanted = normalizeMatchToken(needle)
+  if (!haystack || !wanted) return false
+  return haystack === wanted
+}
+
 /** האם לספק מוגדרת עיר העבודה (כמו בהתאמת וובהוק הפניות) */
 export function accountMatchesCity(
   workingAreas: string | null | undefined,
@@ -124,16 +137,14 @@ export function accountMatchesAnyCity(
   return cityNames.some((city) => arrayContainsNeedle(areas, city))
 }
 
-/** האם לספק מוגדר התחום (שירות / קטגוריה / תחום ראשי) */
+/** התאמה מדויקת לתחום (אחרי ניקוי רווחים). ביטוי רחב יותר לא נחשב התאמה. */
 export function accountMatchesDomain(
   specialties: string | null | undefined,
   specialtiesCategory: string | null | undefined,
   domain: string,
 ): boolean {
   const list = parseJsonStringArrayField(specialties)
-  return (
-    arrayContainsNeedle(list, domain) || scalarContainsNeedle(specialtiesCategory, domain)
-  )
+  return arrayEqualsToken(list, domain) || scalarEqualsToken(specialtiesCategory, domain)
 }
 
 type AccountCityDomainFields = {
