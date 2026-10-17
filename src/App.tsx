@@ -120,11 +120,39 @@ export default function App() {
                 <Route path="/blacklist/attempts" element={<Navigate to="/general/blacklist-attempts" replace />} />
                 <Route path="/blacklist/:segment" element={<Navigate to="/general/blacklist" replace />} />
                 <Route path="/general" element={<Navigate to="/general/scheduled-lead-calls" replace />} />
-                <Route path="/general/:segment" element={<GeneralPage />} />
-                <Route path="/payment-attempts" element={<PaymentAttemptsPage />} />
+                <Route
+                  path="/general/:segment"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <GeneralPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
+                <Route
+                  path="/payment-attempts"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <PaymentAttemptsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/tickets" element={<TicketsPage />} />
-                <Route path="/conversations" element={<ConversationsPage />} />
-                <Route path="/complaints" element={<ComplaintsPage />} />
+                <Route
+                  path="/conversations"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <ConversationsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
+                <Route
+                  path="/complaints"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <ComplaintsPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route
                   path="/expenses"
                   element={(

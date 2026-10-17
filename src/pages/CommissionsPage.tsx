@@ -27,6 +27,8 @@ import AddIcon from '@mui/icons-material/Add'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { createService, getServices, patchCategoryPromotion, patchService, patchServicePrice, type Service } from '../api/csApi'
+import { useAuth } from '../context/useAuth'
+import { isManagerUser } from '../lib/roles'
 
 type SearchOpt = { type: 'category' | 'service'; value: string; label: string }
 
@@ -93,6 +95,8 @@ function CommissionField({ label, children }: { label: string; children: ReactNo
 }
 
 export default function CommissionsPage() {
+  const { user } = useAuth()
+  const canEdit = isManagerUser(user)
   const [rows, setRows] = useState<CommissionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -476,25 +480,27 @@ export default function CommissionsPage() {
               <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
                 {loading ? 'טוען…' : `תוצאות: ${filtered.length}`}
               </Typography>
-              <Button
-                variant="contained"
-                endIcon={<AddIcon />}
-                onClick={openAddDialog}
-                sx={{
-                  whiteSpace: 'nowrap',
-                  '& .MuiButton-endIcon': {
-                    marginInlineStart: '10px',
-                    marginInlineEnd: 0,
-                  },
-                }}
-              >
-                תחום חדש
-              </Button>
+              {canEdit ? (
+                <Button
+                  variant="contained"
+                  endIcon={<AddIcon />}
+                  onClick={openAddDialog}
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    '& .MuiButton-endIcon': {
+                      marginInlineStart: '10px',
+                      marginInlineEnd: 0,
+                    },
+                  }}
+                >
+                  תחום חדש
+                </Button>
+              ) : null}
             </Stack>
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            ניתן לערוך תחומים ומחירים.
+            {canEdit ? 'ניתן לערוך תחומים ומחירים.' : 'צפייה בלבד.'}
           </Typography>
 
           {loading ? (
@@ -537,6 +543,7 @@ export default function CommissionsPage() {
                         onSavePrice={savePrice}
                         onSaveService={saveService}
                         onPromotionChange={saveCategoryPromotion}
+                        readOnly={!canEdit}
                         savingPriceIds={savingPriceIds}
                         savingServiceIds={savingServiceIds}
                         savingPromotionCategories={savingPromotionCategories}
@@ -638,6 +645,7 @@ function EditableServiceCell({
   draftValue,
   saving,
   errorText,
+  readOnly,
   onDraftChange,
   onSave,
 }: {
@@ -646,9 +654,23 @@ function EditableServiceCell({
   draftValue: string
   saving: boolean
   errorText?: string
+  readOnly?: boolean
   onDraftChange: (value: string) => void
   onSave: () => void
 }) {
+  if (readOnly) {
+    return (
+      <TableCell align="right" sx={{ backgroundColor: rowBg, minWidth: 200 }}>
+        <Typography sx={{ textAlign: 'right' }}>{row.service || '—'}</Typography>
+        {row.subService ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'right' }}>
+            {`תת-תחום: ${row.subService}`}
+          </Typography>
+        ) : null}
+      </TableCell>
+    )
+  }
+
   return (
     <TableCell align="right" sx={{ backgroundColor: rowBg, minWidth: 200 }}>
       <TextField
@@ -697,6 +719,7 @@ function EditablePriceCell({
   draftValue,
   saving,
   errorText,
+  readOnly,
   onDraftChange,
   onSave,
 }: {
@@ -705,13 +728,14 @@ function EditablePriceCell({
   draftValue: string
   saving: boolean
   errorText?: string
+  readOnly?: boolean
   onDraftChange: (value: string) => void
   onSave: () => void
 }) {
-  if (row.price == null) {
+  if (readOnly || row.price == null) {
     return (
       <TableCell align="right" sx={{ backgroundColor: rowBg }}>
-        —
+        {readOnly ? formatPrice(row.price) : '—'}
       </TableCell>
     )
   }
@@ -778,6 +802,7 @@ function FragmentRows({
   onSavePrice,
   onSaveService,
   onPromotionChange,
+  readOnly,
   savingPriceIds,
   savingServiceIds,
   savingPromotionCategories,
@@ -799,6 +824,7 @@ function FragmentRows({
   onSavePrice: (row: CommissionRow) => void | Promise<void>
   onSaveService: (row: CommissionRow) => void | Promise<void>
   onPromotionChange: (categoryName: string, promotion: boolean) => void | Promise<void>
+  readOnly?: boolean
   savingPriceIds: Set<number>
   savingServiceIds: Set<number>
   savingPromotionCategories: Set<string>
@@ -840,7 +866,11 @@ function FragmentRows({
               <Checkbox
                 checked={categoryPromotion}
                 indeterminate={categoryPromotionIndeterminate}
-                onChange={(_e, checked) => void onPromotionChange(categoryName, checked)}
+                disabled={Boolean(readOnly) || savingPromotion}
+                onChange={(_e, checked) => {
+                  if (readOnly) return
+                  void onPromotionChange(categoryName, checked)
+                }}
                 slotProps={{ input: { 'aria-label': `יש ממומן ${categoryName}` } }}
               />
             )}
@@ -860,6 +890,7 @@ function FragmentRows({
                 draftValue={getDraftService(r)}
                 saving={savingServiceIds.has(r.id)}
                 errorText={rowServiceErrors[r.id]}
+                readOnly={readOnly}
                 onDraftChange={(value) => setDraftService(r.id, value)}
                 onSave={() => void onSaveService(r)}
               />
@@ -869,6 +900,7 @@ function FragmentRows({
                 draftValue={getDraftPrice(r)}
                 saving={savingPriceIds.has(r.id)}
                 errorText={rowPriceErrors[r.id]}
+                readOnly={readOnly}
                 onDraftChange={(value) => setDraftPrice(r.id, value)}
                 onSave={() => void onSavePrice(r)}
               />

@@ -24,7 +24,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAuth } from '../context/useAuth'
 import { getConversations } from '../api/csApi'
 import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/headerLayout'
-import { isManagerRole } from '../lib/roles'
+import { isManagerOnlyRoute, isManagerUser } from '../lib/roles'
 
 const drawerWidth = 260
 
@@ -73,19 +73,9 @@ const bottomLinks: NavLink[] = [
   { to: '/dashboards/leads', prefix: '/dashboards', label: 'דשבורדים' },
 ]
 
-const MANAGER_ONLY_PREFIXES = new Set([
-  '/jobs',
-  '/tasks',
-  '/company-employees',
-  '/domains',
-  '/dashboards',
-  '/notifications',
-  '/expenses',
-])
-
 function filterNavLinks(links: NavLink[], isManager: boolean): NavLink[] {
   if (isManager) return links
-  return links.filter((l) => !MANAGER_ONLY_PREFIXES.has(l.prefix))
+  return links.filter((l) => !isManagerOnlyRoute(l.prefix))
 }
 
 const allLinks = [...mainLinks, ...bottomLinks]
@@ -330,9 +320,10 @@ export default function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const isManager = isManagerUser(user)
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !isManager) {
       setOpenConversationsCount(0)
       return
     }
@@ -354,9 +345,8 @@ export default function AppLayout() {
       cancelled = true
       clearInterval(intervalId)
     }
-  }, [user, location.pathname])
+  }, [user, isManager, location.pathname])
 
-  const isManager = isManagerRole(user?.role)
   const visibleMainLinks = useMemo(() => filterNavLinks(mainLinks, isManager), [isManager])
   const visibleBottomLinks = useMemo(() => filterNavLinks(bottomLinks, isManager), [isManager])
   const visibleAllLinks = useMemo(

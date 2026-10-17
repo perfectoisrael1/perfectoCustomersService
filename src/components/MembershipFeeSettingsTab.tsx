@@ -17,11 +17,11 @@ import {
 } from '../api/csApi'
 import { formatCsDateTime } from '../lib/caliberUi'
 import { useAuth } from '../context/useAuth'
-import { isManagerRole } from '../lib/roles'
+import { isManagerUser } from '../lib/roles'
 
 export default function MembershipFeeSettingsTab() {
   const { user } = useAuth()
-  const canEdit = isManagerRole(user?.role)
+  const canEdit = isManagerUser(user)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

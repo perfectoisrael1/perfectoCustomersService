@@ -18,10 +18,10 @@ import EmployeeAvailabilityTable from '../components/EmployeeAvailabilityTable'
 import {
   buildIdentityCandidates,
   isActive,
-  isAdminOrSuperadminRole,
   pickUserAttendanceRecord,
   resolveAttendanceResponsible,
 } from '../lib/attendanceUtils'
+import { isManagerUser } from '../lib/roles'
 import {
   listAllAttendanceToday,
   startAttendance,
@@ -48,7 +48,7 @@ export default function PersonalAreaPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const innerTab = resolveInnerTab(location.pathname)
-  const canManageAvailability = isAdminOrSuperadminRole(user?.role)
+  const canManageAvailability = isManagerUser(user)
 
   const identityCandidates = useMemo(() => buildIdentityCandidates(user), [user])
 

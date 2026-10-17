@@ -45,6 +45,8 @@ import {
 } from '../lib/accountsUi'
 import { formatCsPhoneDisplay, formatCsDateTime, jobStatusChipColors } from '../lib/caliberUi'
 import { STANDARD_TABLE_BODY_FONT_PX } from '../lib/leadsUi'
+import { useAuth } from '../context/useAuth'
+import { isManagerUser } from '../lib/roles'
 
 type Props = {
   open: boolean
@@ -133,6 +135,9 @@ export default function AccountEditDialog({
   onDelete,
   onAccountPatch,
 }: Props) {
+  const { user } = useAuth()
+  const canSeeJobsTab = isManagerUser(user)
+  const visibleTabs = ACCOUNT_EDIT_TABS.filter((t) => t.key !== 'jobs' || canSeeJobsTab)
   const [tab, setTab] = useState<AccountTabKey>('phone')
   const [linkedJobs, setLinkedJobs] = useState<Job[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
@@ -146,6 +151,10 @@ export default function AccountEditDialog({
   useEffect(() => {
     if (open) setTab('phone')
   }, [open, existingAccount?.id])
+
+  useEffect(() => {
+    if (tab === 'jobs' && !canSeeJobsTab) setTab('phone')
+  }, [tab, canSeeJobsTab])
 
   useEffect(() => {
     if (!open) {
@@ -686,7 +695,7 @@ export default function AccountEditDialog({
             '& .MuiTabs-indicator': { height: 3 },
           }}
         >
-          {ACCOUNT_EDIT_TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <Tab key={t.key} value={t.key} label={t.title} sx={{ fontWeight: 700, minHeight: 48 }} />
           ))}
         </Tabs>
