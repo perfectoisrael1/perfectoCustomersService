@@ -26,6 +26,7 @@ const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'))
 const PaymentAttemptsPage = lazy(() => import('./pages/PaymentAttemptsPage'))
 const GeneralPage = lazy(() => import('./pages/GeneralPage'))
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
+const AdvertisingExpensesPage = lazy(() => import('./pages/AdvertisingExpensesPage'))
 const AccountDeletionRequestPage = lazy(() => import('./pages/AccountDeletionRequestPage'))
 
 function PageLoadFallback() {
@@ -162,6 +163,14 @@ export default function App() {
                   )}
                 />
                 <Route path="/general/expenses" element={<Navigate to="/expenses" replace />} />
+                <Route
+                  path="/advertising-expenses"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <AdvertisingExpensesPage />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/tasks" element={<Navigate to="/tasks/my-tasks" replace />} />
                 <Route
                   path="/tasks/:tabSlug"
@@ -209,6 +218,7 @@ export default function App() {
                 <Route path="/personal-area/attendance" element={<Navigate to="/personal-area/attendance/attendance" replace />} />
                 <Route path="/personal-area/attendance/:subTab" element={<PersonalAreaPage />} />
                 <Route path="/personal-area/availability" element={<PersonalAreaPage />} />
+                <Route path="/personal-area/achievements" element={<PersonalAreaPage />} />
                 <Route path="/personal-area/details" element={<Navigate to="/personal-area" replace />} />
                 <Route path="/personal-area" element={<PersonalAreaPage />} />
               </Route>

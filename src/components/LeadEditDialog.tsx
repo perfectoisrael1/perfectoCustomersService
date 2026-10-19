@@ -38,6 +38,7 @@ type Props = {
   onClose: () => void
   onSave: () => void | Promise<void>
   onDelete: () => void | Promise<void>
+  responsibleOptions: string[]
 }
 
 const Field = ({
@@ -84,6 +85,7 @@ export default function LeadEditDialog({
   onClose,
   onSave,
   onDelete,
+  responsibleOptions,
 }: Props) {
   const isNew = editor === 'new'
   const existingLead: Lead | null = editor !== 'new' && editor ? editor : null
@@ -294,14 +296,41 @@ export default function LeadEditDialog({
           </Field>
 
           <Field label="אחראי">
-            <TextField
-              fullWidth
+            <Select
               size="small"
+              fullWidth
               value={form.responsible || ''}
               onChange={(e) => setForm((f) => ({ ...f, responsible: e.target.value || null }))}
-              sx={leadFieldInputSx}
-              slotProps={{ input: rtlInput }}
-            />
+              displayEmpty
+              sx={{
+                ...leadFieldInputSx,
+                direction: 'rtl',
+                '& .MuiSelect-select': { textAlign: 'right' },
+                '& .MuiSelect-icon': { left: 8, right: 'auto' },
+              }}
+              MenuProps={{
+                slotProps: {
+                  paper: {
+                    sx: {
+                      direction: 'rtl',
+                      '& .MuiMenuItem-root': { justifyContent: 'flex-start', direction: 'rtl' },
+                    },
+                  },
+                },
+              }}
+            >
+              <MenuItem value="">
+                <em>ללא אחראי</em>
+              </MenuItem>
+              {form.responsible && !responsibleOptions.includes(form.responsible) ? (
+                <MenuItem value={form.responsible}>{form.responsible}</MenuItem>
+              ) : null}
+              {responsibleOptions.map((name) => (
+                <MenuItem key={name} value={name}>
+                  {name}
+                </MenuItem>
+              ))}
+            </Select>
           </Field>
 
           <Field label="פולואפ (תאריך)">

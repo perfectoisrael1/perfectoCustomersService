@@ -44,6 +44,7 @@ export const MANAGER_ONLY_ROUTE_PREFIXES = [
   '/conversations',
   '/complaints',
   '/expenses',
+  '/advertising-expenses',
   '/general',
 ] as const
 

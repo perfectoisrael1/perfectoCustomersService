@@ -15,6 +15,7 @@ import { useAuth } from '../context/useAuth'
 import AttendancePage from './AttendancePage'
 import AttendanceHoursPage from './AttendanceHoursPage'
 import EmployeeAvailabilityTable from '../components/EmployeeAvailabilityTable'
+import PersonalAchievementsPanel from '../components/PersonalAchievementsPanel'
 import {
   buildIdentityCandidates,
   isActive,
@@ -29,17 +30,19 @@ import {
 } from '../api/attendanceApi'
 import { STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS } from '../layout/headerLayout'
 
-type InnerTab = 'personal' | 'attendanceHours' | 'availability'
+type InnerTab = 'personal' | 'attendanceHours' | 'availability' | 'achievements'
 
 function getPathForTab(tab: InnerTab): string {
   if (tab === 'attendanceHours') return '/personal-area/attendance'
   if (tab === 'availability') return '/personal-area/availability'
+  if (tab === 'achievements') return '/personal-area/achievements'
   return '/personal-area'
 }
 
 function resolveInnerTab(pathname: string): InnerTab {
   if (pathname.startsWith('/personal-area/attendance')) return 'attendanceHours'
   if (pathname.startsWith('/personal-area/availability')) return 'availability'
+  if (pathname.startsWith('/personal-area/achievements')) return 'achievements'
   return 'personal'
 }
 
@@ -171,6 +174,7 @@ export default function PersonalAreaPage() {
         >
           <Tab value="personal" label="שעון נוכחות" />
           <Tab value="attendanceHours" label="שעות נוכחות" />
+          <Tab value="achievements" label="הישגים" />
           {canManageAvailability && <Tab value="availability" label="זמינות עובדים" />}
         </Tabs>
       </Box>
@@ -180,6 +184,7 @@ export default function PersonalAreaPage() {
         {innerTab === 'attendanceHours' && (
           <AttendanceHoursPage routeBase="/personal-area/attendance" />
         )}
+        {innerTab === 'achievements' && <PersonalAchievementsPanel />}
         {innerTab === 'availability' && canManageAvailability && (
           <EmployeeAvailabilityTable canManageAvailability={canManageAvailability} />
         )}

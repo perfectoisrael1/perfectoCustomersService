@@ -928,6 +928,38 @@ export async function getExpenses() {
   return csFetch<Expense[]>('/customer-service/expenses')
 }
 
+export type AdvertisingExpense = {
+  id: number
+  serviceId: number
+  domain: string
+  category: string
+  subService: string | null
+  amount: number
+  expenseDate: string
+  createdAt: string
+}
+
+export type CreateAdvertisingExpenseInput = {
+  serviceId: number
+  amount: number
+  expenseDate: string
+}
+
+export async function getAdvertisingExpenses() {
+  return csFetch<AdvertisingExpense[]>('/customer-service/advertising-expenses')
+}
+
+export async function createAdvertisingExpense(body: CreateAdvertisingExpenseInput) {
+  return csFetch<AdvertisingExpense>('/customer-service/advertising-expenses', {
+    method: 'POST',
+    body,
+  })
+}
+
+export async function deleteAdvertisingExpense(id: number) {
+  return csFetch<void>(`/customer-service/advertising-expenses/${id}`, { method: 'DELETE' })
+}
+
 export async function createExpense(body: CreateExpenseInput) {
   return csFetch<Expense>('/customer-service/expenses', { method: 'POST', body })
 }

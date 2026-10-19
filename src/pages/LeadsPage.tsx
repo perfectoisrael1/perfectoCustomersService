@@ -61,9 +61,11 @@ import {
   createLead,
   deleteLead,
   getLeads,
+  getPerfectoCustomerServiceUsers,
   patchLead,
   type Lead,
   type LeadInput,
+  type PerfectoCustomerServiceUser,
 } from '../api/csApi'
 
 type LeadBaseTab = 'all' | 'today' | 'mine'
@@ -111,6 +113,21 @@ function leadSortValue(row: Lead, col: LeadsSortColumn): string {
   }
 }
 
+function userDisplayName(user: PerfectoCustomerServiceUser): string {
+  return String(user.fullName || user.username || '').trim()
+}
+
+const LEAD_RESPONSIBLE_SELECT_MENU_PROPS = {
+  slotProps: {
+    paper: {
+      sx: {
+        direction: 'rtl',
+        '& .MuiMenuItem-root': { justifyContent: 'flex-start', direction: 'rtl' },
+      },
+    },
+  },
+}
+
 function isMineRow(row: Lead, user: ReturnType<typeof useAuth>['user']): boolean {
   if (!user) return false
   const me = [user.fullName, user.username]
@@ -145,6 +162,8 @@ export default function LeadsPage() {
   const [editor, setEditor] = useState<Lead | 'new' | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<LeadInput>({})
+  const [systemUsers, setSystemUsers] = useState<PerfectoCustomerServiceUser[]>([])
+  const [responsibleSavingId, setResponsibleSavingId] = useState<number | null>(null)
 
   const [sort, setSort] = useState<{ col: LeadsSortColumn; dir: 'asc' | 'desc' }>({
     col: 'created',
@@ -169,6 +188,26 @@ export default function LeadsPage() {
   useEffect(() => {
     void loadAll()
   }, [loadAll])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await getPerfectoCustomerServiceUsers()
+        setSystemUsers(Array.isArray(data) ? data : [])
+      } catch {
+        setSystemUsers([])
+      }
+    })()
+  }, [])
+
+  const responsibleOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const u of systemUsers) {
+      const name = userDisplayName(u)
+      if (name) names.add(name)
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'he'))
+  }, [systemUsers])
 
   const counts = useMemo(() => {
     const todayIso = new Intl.DateTimeFormat('en-CA', {
@@ -317,6 +356,25 @@ export default function LeadsPage() {
       setError(err instanceof Error ? err.message : 'שגיאה בשמירה')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleInlineResponsibleChange = async (row: Lead, newResponsible: string) => {
+    const next = newResponsible.trim() || null
+    if (!row?.id || (next || '') === String(row.responsible || '').trim()) return
+    setResponsibleSavingId(row.id)
+    setError(null)
+    try {
+      await patchLead(row.id, { responsible: next })
+      setAllRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, responsible: next } : r)))
+      setEditor((ed) => (ed && ed !== 'new' && ed.id === row.id ? { ...ed, responsible: next } : ed))
+      if (editor && editor !== 'new' && editor.id === row.id) {
+        setForm((f) => ({ ...f, responsible: next }))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בעדכון אחראי')
+    } finally {
+      setResponsibleSavingId(null)
     }
   }
 
@@ -773,7 +831,63 @@ export default function LeadsPage() {
                               <TableCell sx={{ direction: 'ltr', textAlign: 'right', color: 'text.secondary' }}>
                                 {formatCsDateTime(row.created)}
                               </TableCell>
-                              <TableCell title={row.responsible || ''}>{row.responsible || '—'}</TableCell>
+                              <TableCell
+                                title={row.responsible || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                sx={{
+                                  py: 0.5,
+                                  px: 0.5,
+                                  verticalAlign: 'middle',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Select
+                                  size="small"
+                                  value={row.responsible || ''}
+                                  disabled={responsibleSavingId === row.id}
+                                  onChange={(e) => void handleInlineResponsibleChange(row, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  variant="standard"
+                                  disableUnderline
+                                  displayEmpty
+                                  renderValue={(selected) => {
+                                    if (responsibleSavingId === row.id) {
+                                      return <CircularProgress size={18} />
+                                    }
+                                    return selected || '—'
+                                  }}
+                                  sx={{
+                                    fontSize: 15,
+                                    width: '100%',
+                                    direction: 'rtl',
+                                    '& .MuiSelect-select': {
+                                      py: 0,
+                                      textAlign: 'right',
+                                      pr: '0 !important',
+                                      pl: '18px !important',
+                                    },
+                                    '& .MuiSelect-icon': {
+                                      left: 0,
+                                      right: 'auto',
+                                    },
+                                  }}
+                                  MenuProps={LEAD_RESPONSIBLE_SELECT_MENU_PROPS}
+                                >
+                                  <MenuItem value="">
+                                    <em>ללא אחראי</em>
+                                  </MenuItem>
+                                  {row.responsible && !responsibleOptions.includes(row.responsible) ? (
+                                    <MenuItem value={row.responsible}>{row.responsible}</MenuItem>
+                                  ) : null}
+                                  {responsibleOptions.map((name) => (
+                                    <MenuItem key={name} value={name}>
+                                      {name}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </TableCell>
                             </TableRow>
                           )
                         })}
@@ -819,6 +933,7 @@ export default function LeadsPage() {
         onClose={() => setEditor(null)}
         onSave={handleSave}
         onDelete={handleDelete}
+        responsibleOptions={responsibleOptions}
       />
 
       <CsTableSelectionBar

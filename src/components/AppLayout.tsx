@@ -55,6 +55,7 @@ const mainLinks: NavLink[] = [
   { to: '/conversations?tab=open', prefix: '/conversations', label: 'שיחות' },
   { to: '/complaints', prefix: '/complaints', label: 'תלונות' },
   { to: '/expenses', prefix: '/expenses', label: 'הוצאות' },
+  { to: '/advertising-expenses', prefix: '/advertising-expenses', label: 'הוצאות פרסום' },
   {
     to: '/general/scheduled-lead-calls',
     prefix: '/general',
