@@ -293,6 +293,7 @@ export default function AccountsPage() {
       payPerLead: null,
       membershipPaid: false,
       yearsOfExperience: null,
+      dailyInquiryLimit: null,
       slug: '',
     })
     setEditor('new')
@@ -327,6 +328,8 @@ export default function AccountsPage() {
         row.yearsOfExperience == null || row.yearsOfExperience === ''
           ? null
           : Number.parseInt(String(row.yearsOfExperience), 10),
+      dailyInquiryLimit:
+        row.dailyInquiryLimit == null ? null : Number.parseInt(String(row.dailyInquiryLimit), 10),
       slug: row.slug,
       password: row.password?.trim() && row.password !== '—' ? row.password : '',
     })

@@ -355,6 +355,20 @@ export default function PpcDashboardWidgets({
               <Typography>
                 <strong>תיאור:</strong> {detail.description || '—'}
               </Typography>
+              <Typography>
+                <strong>היסטוריית פעולות:</strong>
+              </Typography>
+              {detail.actionHistory?.length ? (
+                detail.actionHistory.map((item, index) => (
+                  <Typography key={`${item.at}-${index}`} variant="body2">
+                    {item.action} · {formatCsDateTime(item.at)}
+                  </Typography>
+                ))
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  —
+                </Typography>
+              )}
               <Typography variant="caption" color="text.secondary">
                 נוצר: {formatCsDateTime(detail.created)} · עודכן: {formatCsDateTime(detail.updated)}
               </Typography>

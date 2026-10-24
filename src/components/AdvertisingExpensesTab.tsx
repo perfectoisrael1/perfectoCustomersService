@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -10,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableRow,
   TableSortLabel,
@@ -33,11 +35,37 @@ import {
   getAdvertisingExpenses,
   type AdvertisingExpense,
 } from '../api/csApi'
-import { formatExpenseAmount, formatExpenseDate } from '../lib/expensesUi'
+import { expenseRtlFieldSx, formatExpenseAmount, formatExpenseDate } from '../lib/expensesUi'
 import CreateAdvertisingExpenseDialog from './CreateAdvertisingExpenseDialog'
 
-type SortCol = 'domain' | 'expenseDate' | 'amount'
+type SortCol = 'domain' | 'expenseDate' | 'amount' | 'income' | 'netProfit'
+
+function netProfit(row: Pick<AdvertisingExpense, 'amount' | 'income'>): number {
+  return (Number(row.income) || 0) - (Number(row.amount) || 0)
+}
 type SortDir = 'asc' | 'desc'
+
+function profitRowSx(row: AdvertisingExpense) {
+  const expense = Number(row.amount) || 0
+  const income = Number(row.income) || 0
+  if (income > expense) {
+    return {
+      bgcolor: 'rgba(76, 175, 80, 0.16) !important',
+      '&:hover': { bgcolor: 'rgba(76, 175, 80, 0.24) !important' },
+    }
+  }
+  if (expense > income) {
+    return {
+      bgcolor: 'rgba(244, 67, 54, 0.14) !important',
+      '&:hover': { bgcolor: 'rgba(244, 67, 54, 0.22) !important' },
+    }
+  }
+  return undefined
+}
+
+function isDeletableRate(row: AdvertisingExpense): boolean {
+  return !row.incomeOnly && Number(row.id) > 0
+}
 
 function domainLabel(row: AdvertisingExpense): string {
   const domain = String(row.domain || '').trim()
@@ -53,6 +81,9 @@ export default function AdvertisingExpensesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [domainFilter, setDomainFilter] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(50)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -78,26 +109,48 @@ export default function AdvertisingExpensesTab() {
     void load()
   }, [load])
 
+  const domainOptions = useMemo(() => {
+    const labels = new Set<string>()
+    for (const row of rows) {
+      const label = domainLabel(row)
+      if (label && label !== '—') labels.add(label)
+    }
+    return [...labels].sort((a, b) => a.localeCompare(b, 'he'))
+  }, [rows])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((row) =>
-      [domainLabel(row), row.expenseDate, row.amount]
+    const from = dateFrom.trim().slice(0, 10)
+    const to = dateTo.trim().slice(0, 10)
+    return rows.filter((row) => {
+      const day = String(row.expenseDate || '').slice(0, 10)
+      if (from && day && day < from) return false
+      if (to && day && day > to) return false
+      if (domainFilter && domainLabel(row) !== domainFilter) return false
+      if (!q) return true
+      return [domainLabel(row), row.expenseDate, row.amount, row.income, netProfit(row)]
         .map((value) => String(value || '').toLowerCase())
         .join(' ')
-        .includes(q),
-    )
-  }, [query, rows])
+        .includes(q)
+    })
+  }, [dateFrom, dateTo, domainFilter, query, rows])
 
   useEffect(() => {
     setPage(0)
-  }, [query, sort.col, sort.dir])
+  }, [dateFrom, dateTo, domainFilter, query, sort.col, sort.dir])
 
   const sortedRows = useMemo(() => {
     const copy = [...filtered]
     copy.sort((a, b) => {
-      const va = sort.col === 'amount' ? String(a.amount ?? 0) : sort.col === 'domain' ? domainLabel(a) : String(a.expenseDate || '')
-      const vb = sort.col === 'amount' ? String(b.amount ?? 0) : sort.col === 'domain' ? domainLabel(b) : String(b.expenseDate || '')
+      const sortValue = (row: AdvertisingExpense) => {
+        if (sort.col === 'amount') return String(row.amount ?? 0)
+        if (sort.col === 'income') return String(row.income ?? 0)
+        if (sort.col === 'netProfit') return String(netProfit(row))
+        if (sort.col === 'domain') return domainLabel(row)
+        return String(row.expenseDate || '')
+      }
+      const va = sortValue(a)
+      const vb = sortValue(b)
       const cmp = va.localeCompare(vb, 'he', { numeric: true })
       return sort.dir === 'asc' ? cmp : -cmp
     })
@@ -109,6 +162,16 @@ export default function AdvertisingExpensesTab() {
     return sortedRows.slice(start, start + rowsPerPage)
   }, [page, rowsPerPage, sortedRows])
 
+  const totals = useMemo(() => {
+    let amount = 0
+    let income = 0
+    for (const row of filtered) {
+      amount += Number(row.amount) || 0
+      income += Number(row.income) || 0
+    }
+    return { amount, income }
+  }, [filtered])
+
   const onSortColumn = (col: SortCol) => {
     setSort((prev) =>
       prev.col === col
@@ -119,16 +182,45 @@ export default function AdvertisingExpensesTab() {
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button variant="contained" onClick={() => setDialogOpen(true)}>
-          הוצאה חדשה
-        </Button>
-        <Button variant="outlined" onClick={() => void load()} disabled={loading}>
-          רענון
-        </Button>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+        <Autocomplete
+          options={domainOptions}
+          value={domainFilter}
+          onChange={(_e, value) => setDomainFilter(value)}
+          size="small"
+          clearOnEscape
+          noOptionsText="אין תחומים"
+          sx={{
+            width: { xs: 200, sm: 260 },
+            ...expenseRtlFieldSx,
+            '& .MuiOutlinedInput-root': { borderRadius: 999, backgroundColor: 'background.paper' },
+          }}
+          slotProps={{ paper: { sx: { direction: 'rtl' } } }}
+          renderInput={(params) => (
+            <TextField {...params} placeholder="סינון לפי תחום" />
+          )}
+        />
         <TextField
           size="small"
-          placeholder="חיפוש תחום / תאריך / סכום"
+          type="date"
+          label="מתאריך"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          sx={{ ...expenseRtlFieldSx, minWidth: 160 }}
+          slotProps={{ inputLabel: { shrink: true }, htmlInput: { dir: 'rtl' } }}
+        />
+        <TextField
+          size="small"
+          type="date"
+          label="עד תאריך"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          sx={{ ...expenseRtlFieldSx, minWidth: 160 }}
+          slotProps={{ inputLabel: { shrink: true }, htmlInput: { dir: 'rtl' } }}
+        />
+        <TextField
+          size="small"
+          placeholder="חיפוש תחום / תאריך / הוצאה"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           slotProps={{
@@ -154,6 +246,13 @@ export default function AdvertisingExpensesTab() {
             '& .MuiInputBase-input': { textAlign: 'right', direction: 'rtl' },
           }}
         />
+        <Button
+          variant="contained"
+          onClick={() => setDialogOpen(true)}
+          sx={{ fontWeight: 700, marginInlineStart: 'auto' }}
+        >
+          הגדרת תעריפים
+        </Button>
       </Box>
 
       {error ? (
@@ -169,14 +268,34 @@ export default function AdvertisingExpensesTab() {
       ) : (
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', mt: `${GAP_BELOW_INNER_NAV_PX}px` }}>
           <CsTableContainer>
-            <Table size="small">
+            <Table
+              size="small"
+              sx={{
+                '& tfoot': {
+                  position: 'sticky',
+                  bottom: 0,
+                  zIndex: 11,
+                },
+                '& tfoot td': {
+                  fontWeight: 800,
+                  borderTop: '2px solid',
+                  borderColor: 'divider',
+                },
+              }}
+            >
               <TableHead>
                 <TableRow>
                   <CsTableSelectAllHeaderCell
                     pageRows={pageRows}
-                    getRowId={(row) => (row as AdvertisingExpense).id}
+                    getRowId={(row) =>
+                      isDeletableRate(row as AdvertisingExpense)
+                        ? (row as AdvertisingExpense).id
+                        : null
+                    }
                     selectedIds={rowSelection.selectedIds}
-                    onTogglePage={() => rowSelection.toggleAllOnPage(pageRows)}
+                    onTogglePage={() =>
+                      rowSelection.toggleAllOnPage(pageRows.filter((row) => isDeletableRate(row)))
+                    }
                   />
                   <TableCell align="center" sortDirection={sort.col === 'domain' ? sort.dir : false}>
                     <TableSortLabel
@@ -193,7 +312,25 @@ export default function AdvertisingExpensesTab() {
                       direction={sort.col === 'amount' ? sort.dir : 'asc'}
                       onClick={() => onSortColumn('amount')}
                     >
-                      סכום
+                      הוצאה
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="center" sortDirection={sort.col === 'income' ? sort.dir : false}>
+                    <TableSortLabel
+                      active={sort.col === 'income'}
+                      direction={sort.col === 'income' ? sort.dir : 'asc'}
+                      onClick={() => onSortColumn('income')}
+                    >
+                      הכנסה
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="center" sortDirection={sort.col === 'netProfit' ? sort.dir : false}>
+                    <TableSortLabel
+                      active={sort.col === 'netProfit'}
+                      direction={sort.col === 'netProfit' ? sort.dir : 'asc'}
+                      onClick={() => onSortColumn('netProfit')}
+                    >
+                      נטו רווח
                     </TableSortLabel>
                   </TableCell>
                   <TableCell align="center" sortDirection={sort.col === 'expenseDate' ? sort.dir : false}>
@@ -210,27 +347,62 @@ export default function AdvertisingExpensesTab() {
               <TableBody>
                 {pageRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} align="center">
-                      אין הוצאות פרסום
+                    <TableCell colSpan={6} align="center">
+                      אין נתונים
                     </TableCell>
                   </TableRow>
                 ) : (
                   pageRows.map((row) => (
-                    <TableRow key={row.id} hover>
+                    <TableRow
+                      key={Number(row.id) > 0 ? row.id : `day-${row.serviceId}-${row.expenseDate}`}
+                      hover
+                      sx={profitRowSx(row)}
+                    >
                       <CsTableRowCheckboxCell
                         rowId={row.id}
                         selected={rowSelection.isSelected(row.id)}
                         onToggle={rowSelection.toggleRow}
+                        disabled={!isDeletableRate(row)}
                       />
                       <TableCell align="center">{domainLabel(row)}</TableCell>
                       <TableCell align="center">
                         {formatExpenseAmount({ amount: row.amount, currency: 'ILS' })}
+                      </TableCell>
+                      <TableCell align="center">
+                        {formatExpenseAmount({ amount: row.income ?? 0, currency: 'ILS' })}
+                      </TableCell>
+                      <TableCell align="center">
+                        {formatExpenseAmount({ amount: netProfit(row), currency: 'ILS' })}
                       </TableCell>
                       <TableCell align="center">{formatExpenseDate(row.expenseDate)}</TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
+              <TableFooter>
+                <TableRow
+                  sx={{
+                    ...profitRowSx({ amount: totals.amount, income: totals.income } as AdvertisingExpense),
+                    '&:hover': undefined,
+                  }}
+                >
+                  <TableCell />
+                  <TableCell align="center">סיכום</TableCell>
+                  <TableCell align="center">
+                    {formatExpenseAmount({ amount: totals.amount, currency: 'ILS' })}
+                  </TableCell>
+                  <TableCell align="center">
+                    {formatExpenseAmount({ amount: totals.income, currency: 'ILS' })}
+                  </TableCell>
+                  <TableCell align="center">
+                    {formatExpenseAmount({
+                      amount: totals.income - totals.amount,
+                      currency: 'ILS',
+                    })}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
             </Table>
           </CsTableContainer>
           <CsTablePaginationFooter
@@ -261,7 +433,10 @@ export default function AdvertisingExpensesTab() {
           entityLabel="הוצאות פרסום"
           dialogTitle="מחיקת הוצאות פרסום"
           onDelete={async () => {
-            await deleteSelectedIds(rowSelection.selectedIds, deleteAdvertisingExpense)
+            await deleteSelectedIds(
+              new Set([...rowSelection.selectedIds].filter((id) => Number(id) > 0)),
+              deleteAdvertisingExpense,
+            )
             rowSelection.clearSelection()
             await load()
           }}

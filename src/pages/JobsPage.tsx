@@ -1387,6 +1387,22 @@ export default function JobsPage() {
                 </>
               ) : null}
               <Typography><strong>תיאור:</strong> {detail.description}</Typography>
+              <Typography>
+                <strong>היסטוריית פעולות:</strong>
+              </Typography>
+              {detail.actionHistory?.length ? (
+                <Stack spacing={0.5} sx={{ pl: 0 }}>
+                  {detail.actionHistory.map((item, index) => (
+                    <Typography key={`${item.at}-${index}`} variant="body2">
+                      {item.action} · {formatCsDateTime(item.at)}
+                    </Typography>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  —
+                </Typography>
+              )}
               <Typography variant="caption" color="text.secondary">
                 נוצר: {formatCsDateTime(detail.created)} · עודכן: {formatCsDateTime(detail.updated)}
               </Typography>

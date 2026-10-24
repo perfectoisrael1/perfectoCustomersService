@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import CloseIcon from '@mui/icons-material/Close'
 import {
   Autocomplete,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -9,10 +10,24 @@ import {
   DialogTitle,
   IconButton,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { createAdvertisingExpense, getServices, type Service } from '../api/csApi'
 import { expenseRtlFieldSx, todayDateInputValue } from '../lib/expensesUi'
+
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: 'א' },
+  { value: 1, label: 'ב' },
+  { value: 2, label: 'ג' },
+  { value: 3, label: 'ד' },
+  { value: 4, label: 'ה' },
+  { value: 5, label: 'ו' },
+  { value: 6, label: 'ש' },
+] as const
+
+const DEFAULT_WEEKDAYS = [0, 1, 2, 3, 4]
 
 function serviceLabel(service: Service): string {
   const domain = String(service.service || '').trim()
@@ -35,6 +50,7 @@ export default function CreateAdvertisingExpenseDialog({
   const [service, setService] = useState<Service | null>(null)
   const [amount, setAmount] = useState('')
   const [expenseDate, setExpenseDate] = useState(todayDateInputValue)
+  const [weekdays, setWeekdays] = useState<number[]>(DEFAULT_WEEKDAYS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,6 +58,7 @@ export default function CreateAdvertisingExpenseDialog({
     setService(null)
     setAmount('')
     setExpenseDate(todayDateInputValue())
+    setWeekdays(DEFAULT_WEEKDAYS)
     setError(null)
   }, [])
 
@@ -75,6 +92,10 @@ export default function CreateAdvertisingExpenseDialog({
       setError('תאריך לא תקין')
       return
     }
+    if (!weekdays.length) {
+      setError('חובה לבחור לפחות יום אחד')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -82,6 +103,7 @@ export default function CreateAdvertisingExpenseDialog({
         serviceId: service.id,
         amount: parsed,
         expenseDate,
+        weekdays,
       })
       await onCreated()
       onClose()
@@ -95,12 +117,15 @@ export default function CreateAdvertisingExpenseDialog({
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        הוצאת פרסום
+        הגדרת תעריף
         <IconButton onClick={onClose} disabled={saving} aria-label="סגירה">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          תמיד נוצרת רשומה חדשה. הרשומה הקודמת לא משתנה.
+        </Typography>
         <Autocomplete
           options={options}
           value={service}
@@ -115,7 +140,7 @@ export default function CreateAdvertisingExpenseDialog({
           )}
         />
         <TextField
-          label="סכום"
+          label="הוצאה ליום"
           value={amount}
           onChange={(e) => {
             setAmount(e.target.value)
@@ -126,15 +151,33 @@ export default function CreateAdvertisingExpenseDialog({
           sx={expenseRtlFieldSx}
         />
         <TextField
-          label="תאריך"
+          label="בתוקף מתאריך"
           type="date"
           value={expenseDate}
+          helperText="הסכום חל בימים שנבחרו מתאריך זה, עד שמוסיפים תעריף חדש לאותו תחום"
           onChange={(e) => {
             setExpenseDate(e.target.value)
             setError(null)
           }}
           sx={expenseRtlFieldSx}
         />
+        <Box>
+          <Typography sx={{ mb: 1, fontWeight: 700, textAlign: 'right' }}>ימי הוצאה</Typography>
+          <ToggleButtonGroup
+            value={weekdays}
+            onChange={(_e, next: number[]) => {
+              setWeekdays((next ?? []).slice().sort((a, b) => a - b))
+              setError(null)
+            }}
+            sx={{ flexWrap: 'wrap', direction: 'rtl' }}
+          >
+            {WEEKDAY_OPTIONS.map((day) => (
+              <ToggleButton key={day.value} value={day.value} sx={{ px: 1.5, minWidth: 40 }}>
+                {day.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Box>
         {error ? (
           <Typography color="error" variant="body2">
             {error}
@@ -146,7 +189,7 @@ export default function CreateAdvertisingExpenseDialog({
           ביטול
         </Button>
         <Button variant="contained" onClick={() => void submit()} disabled={saving}>
-          שמירה
+          הוספת רשומה
         </Button>
       </DialogActions>
     </Dialog>

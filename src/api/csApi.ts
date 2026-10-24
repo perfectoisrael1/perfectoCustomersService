@@ -44,6 +44,7 @@ export type Job = {
   updated: string
   source?: string | null
   paidAmount?: number
+  actionHistory?: Array<{ action: string; at: string }>
 }
 
 export type Account = {
@@ -59,6 +60,7 @@ export type Account = {
   specialtiesCategory: string | null
   workingAreas: string | null
   yearsOfExperience: string | null
+  dailyInquiryLimit?: number | null
   about: string | null
   workingHours: string | null
   certificateNumber: string | null
@@ -520,6 +522,7 @@ export type AccountInput = Partial<{
   payPerLead: number | null
   membershipPaid?: boolean
   yearsOfExperience: number | null
+  dailyInquiryLimit: number | null
   slug: string | null
   password?: string | null
 }>
@@ -935,6 +938,9 @@ export type AdvertisingExpense = {
   category: string
   subService: string | null
   amount: number
+  income: number
+  incomeOnly?: boolean
+  weekdays?: number[]
   expenseDate: string
   createdAt: string
 }
@@ -943,6 +949,7 @@ export type CreateAdvertisingExpenseInput = {
   serviceId: number
   amount: number
   expenseDate: string
+  weekdays: number[]
 }
 
 export async function getAdvertisingExpenses() {

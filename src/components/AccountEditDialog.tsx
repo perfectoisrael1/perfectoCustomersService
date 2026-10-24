@@ -309,6 +309,22 @@ export default function AccountEditDialog({
           />
         </Field>
       ) : null}
+      <Field label="הגבלת פניות ביום">
+        <TextField
+          fullWidth
+          size="small"
+          type="number"
+          value={form.dailyInquiryLimit ?? ''}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              dailyInquiryLimit: e.target.value === '' ? null : Number.parseInt(e.target.value, 10),
+            }))
+          }
+          sx={accountFieldInputSx}
+          helperText="ריק = ללא הגבלה"
+        />
+      </Field>
       <Field label="תאריך הצטרפות">
         <Typography sx={{ mt: 0.5, fontSize: 14, color: 'text.secondary' }}>
           {isNew ? '—' : formatCsDateTime(existingAccount?.createdAt)}

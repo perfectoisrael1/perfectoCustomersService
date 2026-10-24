@@ -135,6 +135,8 @@ function buildAccountFormFromRow(row: Account): AccountInput {
       row.yearsOfExperience == null || row.yearsOfExperience === ''
         ? null
         : Number.parseInt(String(row.yearsOfExperience), 10),
+    dailyInquiryLimit:
+      row.dailyInquiryLimit == null ? null : Number.parseInt(String(row.dailyInquiryLimit), 10),
     slug: row.slug,
     password: row.password?.trim() && row.password !== '—' ? row.password : '',
   }
