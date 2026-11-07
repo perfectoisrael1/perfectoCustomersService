@@ -337,6 +337,21 @@ export async function getJobsForAccount(accountId: number) {
   return csFetch<Job[]>(`/customer-service/jobs?${params.toString()}`)
 }
 
+export type AccountCoverageHistoryRow = {
+  id: number
+  accountId: number
+  cities: string[]
+  specialties: string[]
+  startedAt: string | null
+  updatedAt: string | null
+}
+
+export async function getAccountCoverageHistory(accountId: number) {
+  return csFetch<AccountCoverageHistoryRow[]>(
+    `/customer-service/accounts/${accountId}/coverage-history`,
+  )
+}
+
 export async function deleteJob(id: number) {
   return csFetch<void>(`/customer-service/jobs/${id}`, { method: 'DELETE' })
 }

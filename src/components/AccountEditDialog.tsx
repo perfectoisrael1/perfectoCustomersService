@@ -25,9 +25,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { Account, City, Job, Service } from '../api/csApi'
+import type { Account, AccountCoverageHistoryRow, City, Job, Service } from '../api/csApi'
 import type { AccountInput } from '../api/csApi'
-import { deleteAccountSavedCard, getJobsForAccount } from '../api/csApi'
+import { deleteAccountSavedCard, getAccountCoverageHistory, getJobsForAccount } from '../api/csApi'
 import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
 import {
   ACCOUNTS_DIALOG_ACCENT,
@@ -122,6 +122,23 @@ function buildCityOptions(cities: City[]): string[] {
     .sort((a, b) => a.localeCompare(b, 'he'))
 }
 
+function formatCoverageList(values: string[] | null | undefined): string {
+  const items = Array.isArray(values)
+    ? values.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  return items.length ? items.join(', ') : '—'
+}
+
+function formatCoverageWindow(row: AccountCoverageHistoryRow): string {
+  const end = formatCsDateTime(row.updatedAt)
+  const startMs = row.startedAt ? new Date(row.startedAt).getTime() : NaN
+  const endMs = row.updatedAt ? new Date(row.updatedAt).getTime() : NaN
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || Math.abs(endMs - startMs) < 60_000) {
+    return end
+  }
+  return `${formatCsDateTime(row.startedAt)} – ${end}`
+}
+
 export default function AccountEditDialog({
   open,
   account,
@@ -137,16 +154,19 @@ export default function AccountEditDialog({
 }: Props) {
   const { user } = useAuth()
   const canSeeJobsTab = isManagerUser(user)
+  const isNew = account === 'new'
+  const existingAccount: Account | null = account !== 'new' && account ? account : null
   const visibleTabs = ACCOUNT_EDIT_TABS.filter((t) => t.key !== 'jobs' || canSeeJobsTab)
   const [tab, setTab] = useState<AccountTabKey>('phone')
   const [linkedJobs, setLinkedJobs] = useState<Job[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
+  const [coverageRows, setCoverageRows] = useState<AccountCoverageHistoryRow[]>([])
+  const [coverageLoading, setCoverageLoading] = useState(false)
+  const [coverageError, setCoverageError] = useState<string | null>(null)
   const [hasSavedCard, setHasSavedCard] = useState(false)
   const [clearingSavedCard, setClearingSavedCard] = useState(false)
   const [savedCardError, setSavedCardError] = useState<string | null>(null)
-  const isNew = account === 'new'
-  const existingAccount: Account | null = account !== 'new' && account ? account : null
 
   useEffect(() => {
     if (open) setTab('phone')
@@ -191,6 +211,36 @@ export default function AccountEditDialog({
       cancelled = true
     }
   }, [open, tab, existingAccount?.id])
+
+  useEffect(() => {
+    if (!open || tab !== 'domains' || !existingAccount?.id) {
+      return
+    }
+
+    let cancelled = false
+    setCoverageLoading(true)
+    setCoverageError(null)
+
+    void getAccountCoverageHistory(existingAccount.id)
+      .then((rows) => {
+        if (!cancelled) setCoverageRows(Array.isArray(rows) ? rows : [])
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setCoverageRows([])
+          setCoverageError(
+            e instanceof Error ? e.message : 'טעינת היסטוריית התחומים והערים נכשלה',
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCoverageLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, tab, existingAccount?.id, existingAccount?.updatedAt])
 
   const title = isNew
     ? 'ספק חדש'
@@ -390,6 +440,7 @@ export default function AccountEditDialog({
           )}
         />
       </Field>
+      {!isNew ? renderCoverageSection() : null}
     </Stack>
   )
 
@@ -648,6 +699,57 @@ export default function AccountEditDialog({
     )
   }
 
+  const renderCoverageSection = () => (
+    <Box
+      sx={{
+        mt: 1,
+        pt: 2,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1.5 }}>היסטוריית שינויים</Typography>
+      {coverageLoading ? (
+        <Stack sx={{ alignItems: 'center', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={28} />
+        </Stack>
+      ) : coverageError ? (
+        <Typography sx={{ color: 'error.main', fontSize: 14 }}>{coverageError}</Typography>
+      ) : coverageRows.length === 0 ? (
+        <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>
+          אין שינויי תחומים או ערים שמורים עדיין
+        </Typography>
+      ) : (
+        <TableContainer sx={{ maxHeight: 320 }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, width: 220 }}>תאריך</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>תחומים</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>ערים</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {coverageRows.map((row) => (
+                <TableRow key={row.id} hover>
+                  <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                    {formatCoverageWindow(row)}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: 'top', wordBreak: 'break-word' }}>
+                    {formatCoverageList(row.specialties)}
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: 'top', wordBreak: 'break-word' }}>
+                    {formatCoverageList(row.cities)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  )
+
   const tabContent =
     tab === 'phone'
       ? renderPhoneTab()
@@ -725,7 +827,14 @@ export default function AccountEditDialog({
             p: { xs: 2, md: 3 },
           }}
         >
-          {tabContent}
+          <Box sx={{ position: 'relative' }}>
+            <Box aria-hidden inert sx={{ visibility: 'hidden' }}>
+              {renderPhoneTab()}
+            </Box>
+            <Box sx={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
+              {tabContent}
+            </Box>
+          </Box>
         </Paper>
       </DialogContent>
 
