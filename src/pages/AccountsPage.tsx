@@ -63,7 +63,7 @@ import {
   CS_PAGE_FILL_MIN_HEIGHT_CSS,
 } from '../layout/headerLayout'
 
-type AccountTab = 'customers' | 'today' | 'credit'
+type AccountTab = 'customers' | 'today' | 'credit' | 'subscribers'
 
 /** חשבון שעדיין באמצע הרשמה באפליקציה — לא ספק. */
 const REGISTRATION_DRAFT_STATUS = 'registration_draft'
@@ -125,12 +125,19 @@ export default function AccountsPage() {
 
   useEffect(() => {
     const s = String(segment || '')
-    if (s && s !== 'businesses' && s !== 'today' && s !== 'credit') {
+    if (s && s !== 'businesses' && s !== 'today' && s !== 'credit' && s !== 'subscribers') {
       navigate('/accounts/businesses', { replace: true })
     }
   }, [segment, navigate])
 
-  const tab: AccountTab = segment === 'today' ? 'today' : segment === 'credit' ? 'credit' : 'customers'
+  const tab: AccountTab =
+    segment === 'today'
+      ? 'today'
+      : segment === 'credit'
+        ? 'credit'
+        : segment === 'subscribers'
+          ? 'subscribers'
+          : 'customers'
 
   const [rows, setRows] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
@@ -210,6 +217,7 @@ export default function AccountsPage() {
           accountHasMainCategory(r.specialtiesCategory, creditCategory),
       )
     }
+    if (tab === 'subscribers') return rows.filter((r) => r.hasStandingOrder === true)
     return rows
   }, [rows, tab, creditCategory])
 
@@ -270,6 +278,7 @@ export default function AccountsPage() {
       customers: rows.length,
       today: rows.filter((r) => isCreatedTodayJerusalem(r.createdAt)).length,
       credit: rows.filter((r) => r.hasSavedPaymentMethod === true).length,
+      subscribers: rows.filter((r) => r.hasStandingOrder === true).length,
     }),
     [rows],
   )
@@ -461,7 +470,9 @@ export default function AccountsPage() {
                             ? '/accounts/today'
                             : next === 'credit'
                               ? '/accounts/credit'
-                              : '/accounts/businesses',
+                              : next === 'subscribers'
+                                ? '/accounts/subscribers'
+                                : '/accounts/businesses',
                         )
                       }}
                       variant="scrollable"
@@ -477,6 +488,7 @@ export default function AccountsPage() {
                       <Tab value="customers" label={`כל הספקים (${counts.customers})`} />
                       <Tab value="today" label={`הצטרפויות היום (${counts.today})`} />
                       <Tab value="credit" label={`רשימות אשראי (${counts.credit})`} />
+                      <Tab value="subscribers" label={`ספקי מנוי (${counts.subscribers})`} />
                     </Tabs>
                   </Box>
 
@@ -770,6 +782,14 @@ export default function AccountsPage() {
         onAccountPatch={(updated) => {
           setEditor(updated)
           setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+        }}
+        onStandingOrderChange={(accountId, hasStandingOrder) => {
+          setRows((prev) =>
+            prev.map((r) => (r.id === accountId ? { ...r, hasStandingOrder } : r)),
+          )
+          setEditor((prev) =>
+            prev && prev !== 'new' && prev.id === accountId ? { ...prev, hasStandingOrder } : prev,
+          )
         }}
       />
 

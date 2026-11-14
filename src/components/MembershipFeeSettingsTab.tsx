@@ -42,7 +42,7 @@ export default function MembershipFeeSettingsTab() {
     } catch (e) {
       setToast({
         severity: 'error',
-        message: e instanceof Error ? e.message : 'שגיאה בטעינת דמי הקמה',
+        message: e instanceof Error ? e.message : 'שגיאה בטעינת דמי ניהול',
       })
     } finally {
       setLoading(false)
@@ -65,11 +65,11 @@ export default function MembershipFeeSettingsTab() {
       setAmount(String(data.membershipFeeIls))
       setUpdatedAt(data.updatedAt ?? null)
       setSource('db')
-      setToast({ severity: 'success', message: 'דמי ההקמה עודכנו בהצלחה' })
+      setToast({ severity: 'success', message: 'דמי הניהול עודכנו בהצלחה' })
     } catch (e) {
       setToast({
         severity: 'error',
-        message: e instanceof Error ? e.message : 'שגיאה בעדכון דמי הקמה',
+        message: e instanceof Error ? e.message : 'שגיאה בעדכון דמי ניהול',
       })
     } finally {
       setSaving(false)
@@ -87,7 +87,10 @@ export default function MembershipFeeSettingsTab() {
   return (
     <Stack spacing={2} sx={{ mt: `${GAP_BELOW_INNER_NAV_PX}px`, maxWidth: 420, direction: 'rtl' }}>
       <Typography variant="h6" sx={{ fontWeight: 700, textAlign: 'right' }}>
-        דמי הקמה
+        דמי ניהול
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'right' }}>
+        הסכום החודשי לחשבונות חדשים. אחרי שמירה הוא מתעדכן באפליקציה ובדף התשלום.
       </Typography>
 
       <TextField
@@ -125,7 +128,7 @@ export default function MembershipFeeSettingsTab() {
           </Button>
         </Box>
       ) : (
-        <Alert severity="info">רק מנהל יכול לעדכן את דמי ההקמה</Alert>
+        <Alert severity="info">רק מנהל יכול לעדכן את דמי הניהול</Alert>
       )}
 
       <Snackbar

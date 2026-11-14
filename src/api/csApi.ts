@@ -72,6 +72,7 @@ export type Account = {
   credits: number | null
   membershipPaid?: boolean | null
   hasSavedPaymentMethod?: boolean
+  hasStandingOrder?: boolean
   password?: string | null
   createdAt: string
   updatedAt: string
@@ -523,6 +524,27 @@ export async function deleteAccount(id: number) {
 
 export async function deleteAccountSavedCard(id: number) {
   return csFetch<Account>(`/customer-service/accounts/${id}/saved-card`, { method: 'DELETE' })
+}
+
+export type StandingOrderStatus = 'none' | 'active' | 'frozen' | 'stopped'
+
+export type StandingOrder = {
+  status: StandingOrderStatus
+  hkId: string | null
+  columnReady: boolean
+}
+
+export type StandingOrderAction = 'freeze' | 'stop' | 'delete' | 'resume'
+
+export async function getAccountStandingOrder(id: number) {
+  return csFetch<StandingOrder>(`/customer-service/accounts/${id}/standing-order`)
+}
+
+export async function updateAccountStandingOrder(id: number, action: StandingOrderAction) {
+  return csFetch<StandingOrder>(`/customer-service/accounts/${id}/standing-order`, {
+    method: 'POST',
+    body: { action },
+  })
 }
 
 export type AccountInput = Partial<{

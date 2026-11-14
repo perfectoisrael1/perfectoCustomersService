@@ -63,7 +63,7 @@ const GENERAL_TAB_LABELS: Record<GeneralTab, string> = {
   'scheduled-lead-calls': 'שיחות מתוזמנות',
   blacklist: 'רשימה שחורה',
   'blacklist-attempts': 'ניסיונות שנחסמו',
-  'membership-fee': 'דמי הקמה',
+  'membership-fee': 'דמי ניהול',
   'app-maintenance': 'שיפוצים באפליקציה',
 }
 

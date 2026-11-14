@@ -209,11 +209,12 @@ export const accountFieldInputSx = {
   },
 } as const
 
-export type AccountTabKey = 'phone' | 'domains' | 'status' | 'jobs'
+export type AccountTabKey = 'phone' | 'domains' | 'status' | 'standing-order' | 'jobs'
 
 export const ACCOUNT_EDIT_TABS: { key: AccountTabKey; title: string }[] = [
   { key: 'phone', title: 'טלפון' },
   { key: 'domains', title: 'תחומים וערים' },
   { key: 'status', title: 'סטטוס וזמינות' },
+  { key: 'standing-order', title: 'הוראת קבע' },
   { key: 'jobs', title: 'פניות' },
 ]

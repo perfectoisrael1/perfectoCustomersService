@@ -25,9 +25,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { Account, AccountCoverageHistoryRow, City, Job, Service } from '../api/csApi'
+import type { Account, AccountCoverageHistoryRow, City, Job, Service, StandingOrder, StandingOrderAction } from '../api/csApi'
 import type { AccountInput } from '../api/csApi'
-import { deleteAccountSavedCard, getAccountCoverageHistory, getJobsForAccount } from '../api/csApi'
+import {
+  deleteAccountSavedCard,
+  getAccountCoverageHistory,
+  getAccountStandingOrder,
+  getJobsForAccount,
+  updateAccountStandingOrder,
+} from '../api/csApi'
 import CsDialogTitleWithMenu from './CsDialogTitleWithMenu'
 import {
   ACCOUNTS_DIALOG_ACCENT,
@@ -60,6 +66,7 @@ type Props = {
   onSave: () => void | Promise<void>
   onDelete: () => void | Promise<void>
   onAccountPatch?: (account: Account) => void
+  onStandingOrderChange?: (accountId: number, hasStandingOrder: boolean) => void
 }
 
 const Field = ({
@@ -151,6 +158,7 @@ export default function AccountEditDialog({
   onSave,
   onDelete,
   onAccountPatch,
+  onStandingOrderChange,
 }: Props) {
   const { user } = useAuth()
   const canSeeJobsTab = isManagerUser(user)
@@ -167,6 +175,10 @@ export default function AccountEditDialog({
   const [hasSavedCard, setHasSavedCard] = useState(false)
   const [clearingSavedCard, setClearingSavedCard] = useState(false)
   const [savedCardError, setSavedCardError] = useState<string | null>(null)
+  const [standingOrder, setStandingOrder] = useState<StandingOrder | null>(null)
+  const [standingOrderLoading, setStandingOrderLoading] = useState(false)
+  const [standingOrderError, setStandingOrderError] = useState<string | null>(null)
+  const [standingOrderAction, setStandingOrderAction] = useState<StandingOrderAction | null>(null)
 
   useEffect(() => {
     if (open) setTab('phone')
@@ -241,6 +253,35 @@ export default function AccountEditDialog({
       cancelled = true
     }
   }, [open, tab, existingAccount?.id, existingAccount?.updatedAt])
+
+  useEffect(() => {
+    if (!open || tab !== 'standing-order' || !existingAccount?.id) {
+      return
+    }
+
+    let cancelled = false
+    setStandingOrder(null)
+    setStandingOrderLoading(true)
+    setStandingOrderError(null)
+
+    void getAccountStandingOrder(existingAccount.id)
+      .then((row) => {
+        if (!cancelled) setStandingOrder(row)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setStandingOrder(null)
+          setStandingOrderError(e instanceof Error ? e.message : 'טעינת הוראת הקבע נכשלה')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStandingOrderLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, tab, existingAccount?.id])
 
   const title = isNew
     ? 'ספק חדש'
@@ -609,6 +650,123 @@ export default function AccountEditDialog({
     </Box>
   )
 
+  const runStandingOrderAction = (action: Exclude<StandingOrderAction, 'freeze'>) => {
+    if (!existingAccount?.id || standingOrderAction) return
+    const prompts: Record<Exclude<StandingOrderAction, 'freeze'>, string> = {
+      stop: 'לעצור את הוראת הקבע? החיובים הבאים ייעצרו, ואפשר להפעיל מחדש אחר כך.',
+      delete: 'למחוק את הוראת הקבע? החיובים ייעצרו והמזהה יימחק. אי אפשר להפעיל מחדש מהמערכת.',
+      resume: 'להפעיל מחדש את הוראת הקבע? החיוב החודשי יחזור.',
+    }
+    if (!window.confirm(prompts[action])) return
+    setStandingOrderError(null)
+    setStandingOrderAction(action)
+    void updateAccountStandingOrder(existingAccount.id, action)
+      .then((row) => {
+        setStandingOrder(row)
+        onStandingOrderChange?.(existingAccount.id, row.status !== 'none')
+      })
+      .catch((e: unknown) => {
+        setStandingOrderError(e instanceof Error ? e.message : 'עדכון הוראת הקבע נכשל')
+      })
+      .finally(() => setStandingOrderAction(null))
+  }
+
+  const renderStandingOrderTab = () => {
+    if (isNew) {
+      return (
+        <Typography sx={{ color: 'text.secondary', fontSize: 14, textAlign: 'center', py: 4 }}>
+          שמור את הספק כדי לנהל הוראת קבע.
+        </Typography>
+      )
+    }
+
+    if (standingOrderLoading && !standingOrder) {
+      return (
+        <Stack sx={{ alignItems: 'center', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={32} />
+        </Stack>
+      )
+    }
+
+    const status = standingOrder?.status ?? 'none'
+    const statusLabel =
+      status === 'active'
+        ? 'פעילה'
+        : status === 'frozen'
+          ? 'מוקפאת'
+          : status === 'stopped'
+            ? 'עצורה'
+            : 'אין הוראת קבע'
+    const statusColor =
+      status === 'active'
+        ? { bg: '#E5F6E8', fg: '#1B7A32' }
+        : status === 'frozen'
+          ? { bg: '#FFF4E5', fg: '#9A5B00' }
+          : status === 'stopped'
+            ? { bg: '#FDECEC', fg: '#B42318' }
+            : { bg: 'action.hover', fg: 'text.secondary' }
+    const busy = standingOrderAction !== null
+    const hasOrder = status === 'active' || status === 'frozen' || status === 'stopped'
+
+    return (
+      <Stack spacing={2}>
+        {standingOrder && !standingOrder.columnReady ? (
+          <Typography sx={{ color: 'error.main', fontSize: 14 }}>
+            חסרה עמודת ההוראה במסד. יש להריץ את migrations/20261115-accounts-hyp-hk-id.sql
+          </Typography>
+        ) : null}
+        <Field label="סטטוס" fullWidth>
+          <Chip
+            size="small"
+            label={statusLabel}
+            sx={{ mt: 0.5, fontWeight: 700, bgcolor: statusColor.bg, color: statusColor.fg }}
+          />
+          <Typography sx={{ mt: 1, fontSize: 13, color: 'text.secondary', lineHeight: 1.5 }}>
+            {hasOrder
+              ? `מזהה Hyp: ${standingOrder?.hkId}`
+              : 'הוראת קבע נוצרת אחרי שספק חדש משלם דמי ניהול.'}
+          </Typography>
+        </Field>
+        <Typography sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.55 }}>
+          עצירה עוצרת את החיובים הבאים ב-Hyp ושומרת את המזהה כדי שאפשר יהיה להפעיל מחדש.
+          מחיקה עוצרת את החיובים ומוחקת את המזהה.
+        </Typography>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+          {status === 'frozen' || status === 'stopped' ? (
+            <Button
+              variant="contained"
+              size="small"
+              disabled={busy}
+              onClick={() => runStandingOrderAction('resume')}
+            >
+              {standingOrderAction === 'resume' ? <CircularProgress size={18} color="inherit" /> : 'הפעלה מחדש'}
+            </Button>
+          ) : null}
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={busy || (status !== 'active' && status !== 'frozen')}
+            onClick={() => runStandingOrderAction('stop')}
+          >
+            {standingOrderAction === 'stop' ? <CircularProgress size={18} color="inherit" /> : 'עצירה'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            disabled={busy || !hasOrder}
+            onClick={() => runStandingOrderAction('delete')}
+          >
+            {standingOrderAction === 'delete' ? <CircularProgress size={18} color="inherit" /> : 'מחיקה'}
+          </Button>
+        </Stack>
+        {standingOrderError ? (
+          <Typography sx={{ fontSize: 13, color: 'error.main' }}>{standingOrderError}</Typography>
+        ) : null}
+      </Stack>
+    )
+  }
+
   const renderJobsTab = () => {
     if (isNew) {
       return (
@@ -757,7 +915,9 @@ export default function AccountEditDialog({
         ? renderDomainsTab()
         : tab === 'jobs'
           ? renderJobsTab()
-          : renderStatusTab()
+          : tab === 'standing-order'
+            ? renderStandingOrderTab()
+            : renderStatusTab()
 
   return (
     <Dialog
