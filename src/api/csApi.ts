@@ -30,15 +30,15 @@ export type Job = {
   /** NULL = טרם נקבע; true = אושר; false = לא אושר */
   exclusionApproved?: boolean | null
   exclusionDecisionNote?: string | null
-  /** שיחות פולואפ שאושרו (0–2) */
+  /** 1 אחרי שוובהוק הפולואפ נשלח */
   followUp?: number
-  /** שליחות webhook לחיוג (מקסימום 4) */
+  /** שמור לתאימות — לא בשימוש בשליחת הפולואפ הנוכחית */
   followUpCallAttempts?: number
   approvedAt?: string | null
   followUpAt?: string | null
   /** מחכה לשיחה | pending_call | 1 מתוך 2 | done | skipped */
   followUpStatus?: string | null
-  /** זמן השיחה האחרונה שיצאה בפולואפ */
+  /** זמן שליחת וובהוק הפולואפ */
   lastFollowUpAt?: string | null
   created: string
   updated: string
@@ -354,6 +354,11 @@ export async function getAccountCoverageHistory(accountId: number) {
 
 export async function deleteJob(id: number) {
   return csFetch<void>(`/customer-service/jobs/${id}`, { method: 'DELETE' })
+}
+
+/** שולח וובהוק פולואפ ל-Make ומסמן את הפנייה כבוצעה */
+export async function sendJobFollowUp(jobId: number) {
+  return csFetch<Job>(`/customer-service/jobs/${jobId}/follow-up`, { method: 'POST' })
 }
 
 /** אישור החרגה: הפנייה עוברת ל«נדחה», exclusionApproved=true, והחזרת קרדיטים כשנוכו בעת אישור הפנייה */

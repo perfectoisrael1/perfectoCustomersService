@@ -46,6 +46,7 @@ import {
   getServices,
   previewLeaveInquiry,
   rejectJobExclusion,
+  sendJobFollowUp,
   type City,
   type Job,
   type LeaveInquiryPreview,
@@ -108,6 +109,10 @@ function followUpStatusLabel(status: string | null | undefined): string {
   const key = String(status || '').trim()
   if (!key) return '—'
   return FOLLOW_UP_STATUS_LABEL_HE[key] ?? key
+}
+
+function isFollowUpSent(row: Job): boolean {
+  return Math.max(0, Math.floor(Number(row.followUp) || 0)) >= 1
 }
 
 function isJobFollowUpPipeline(row: Job): boolean {
@@ -355,6 +360,7 @@ export default function JobsPage() {
     city: string
   } | null>(null)
   const [broadcastingId, setBroadcastingId] = useState<number | null>(null)
+  const [followUpBusyId, setFollowUpBusyId] = useState<number | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [detailDeleting, setDetailDeleting] = useState(false)
 
@@ -448,6 +454,31 @@ export default function JobsPage() {
       if (!silent) setLoading(false)
     }
   }, [])
+
+  const applyUpdatedJob = useCallback((updated: Job) => {
+    setAllJobs((rows) => rows.map((row) => (row.id === updated.id ? updated : row)))
+    setDetail((current) => (current?.id === updated.id ? updated : current))
+  }, [])
+
+  const sendFollowUp = useCallback(
+    async (job: Job, e?: MouseEvent) => {
+      e?.stopPropagation()
+      if (isFollowUpSent(job) || followUpBusyId != null) return
+      setFollowUpBusyId(job.id)
+      setError(null)
+      setSuccessMessage(null)
+      try {
+        const updated = await sendJobFollowUp(job.id)
+        applyUpdatedJob(updated)
+        setSuccessMessage(`פולואפ נשלח לפנייה #${updated.id}`)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'שליחת הפולואפ נכשלה')
+      } finally {
+        setFollowUpBusyId(null)
+      }
+    },
+    [applyUpdatedJob, followUpBusyId],
+  )
 
   const openExclusionDecision = useCallback(
     (job: Job, mode: 'approve' | 'reject', e: MouseEvent) => {
@@ -1072,7 +1103,7 @@ export default function JobsPage() {
                                 direction={sort.col === 'followUp' ? sort.dir : 'asc'}
                                 onClick={() => onSortColumn('followUp')}
                               >
-                                ניסיון
+                                נשלח
                               </TableSortLabel>
                             </TableCell>
                             <TableCell
@@ -1195,8 +1226,8 @@ export default function JobsPage() {
                           </TableCell>
                           {tab === 'follow-up' ? (
                             <>
-                              <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                                {Math.max(0, Math.floor(Number(row.followUp) || 0))}/2
+                              <TableCell>
+                                {isFollowUpSent(row) ? 'כן' : 'לא'}
                               </TableCell>
                               <TableCell>
                                 <Chip
@@ -1228,56 +1259,67 @@ export default function JobsPage() {
                           )}
                           <TableCell>{formatCsDateTime(row.created)}</TableCell>
                           <TableCell align="center" onClick={(e) => e.stopPropagation()} sx={{ overflow: 'visible', textOverflow: 'clip' }}>
-                            {tab === 'exceptions' ? (
-                              <Stack
-                                direction="row"
-                                spacing={0.75}
-                                sx={{
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                }}
+                            <Stack
+                              direction="row"
+                              spacing={0.75}
+                              sx={{
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={followUpBusyId === row.id || isFollowUpSent(row)}
+                                title={isFollowUpSent(row) ? 'פולואפ כבר נשלח' : 'שליחת פולואפ'}
+                                onClick={(e) => void sendFollowUp(row, e)}
                               >
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  color="success"
-                                  disabled={exceptionsBusyJobId === row.id}
-                                  onClick={(e) => openExclusionDecision(row, 'approve', e)}
-                                >
-                                  {exceptionsBusyJobId === row.id ? (
-                                    <CircularProgress size={18} color="inherit" />
-                                  ) : (
-                                    'אישור'
-                                  )}
-                                </Button>
+                                {followUpBusyId === row.id ? (
+                                  <CircularProgress size={18} color="inherit" />
+                                ) : (
+                                  'פולואפ'
+                                )}
+                              </Button>
+                              {tab === 'exceptions' ? (
+                                <>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    color="success"
+                                    disabled={exceptionsBusyJobId === row.id}
+                                    onClick={(e) => openExclusionDecision(row, 'approve', e)}
+                                  >
+                                    {exceptionsBusyJobId === row.id ? (
+                                      <CircularProgress size={18} color="inherit" />
+                                    ) : (
+                                      'אישור'
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="error"
+                                    disabled={exceptionsBusyJobId === row.id}
+                                    onClick={(e) => openExclusionDecision(row, 'reject', e)}
+                                  >
+                                    לא מאשר
+                                  </Button>
+                                </>
+                              ) : showBroadcastToAccountsButton(row, tab) ? (
                                 <Button
                                   size="small"
                                   variant="outlined"
-                                  color="error"
-                                  disabled={exceptionsBusyJobId === row.id}
-                                  onClick={(e) => openExclusionDecision(row, 'reject', e)}
+                                  disabled={broadcastingId === row.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openBroadcastDialog(row)
+                                  }}
                                 >
-                                  לא מאשר
+                                  {tab === 'unassigned' ? 'שידור לרלוונטים' : 'יצירת פניות'}
                                 </Button>
-                              </Stack>
-                            ) : showBroadcastToAccountsButton(row, tab) ? (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                disabled={broadcastingId === row.id}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  openBroadcastDialog(row)
-                                }}
-                              >
-                                {tab === 'unassigned' ? 'שידור לרלוונטים' : 'יצירת פניות'}
-                              </Button>
-                            ) : (
-                              <Typography variant="caption" color="text.disabled">
-                                —
-                              </Typography>
-                            )}
+                              ) : null}
+                            </Stack>
                           </TableCell>
                         </TableRow>
                         )
@@ -1353,6 +1395,20 @@ export default function JobsPage() {
                 </Typography>
               ) : null}
               <Typography><strong>סטטוס:</strong> {detail.statusLabel}</Typography>
+              <Button
+                size="small"
+                variant="contained"
+                sx={{ alignSelf: 'flex-start' }}
+                disabled={followUpBusyId === detail.id || isFollowUpSent(detail)}
+                title={isFollowUpSent(detail) ? 'פולואפ כבר נשלח' : 'שליחת פולואפ'}
+                onClick={() => void sendFollowUp(detail)}
+              >
+                {followUpBusyId === detail.id ? (
+                  <CircularProgress size={18} color="inherit" />
+                ) : (
+                  'פולואפ'
+                )}
+              </Button>
               <Typography><strong>החרגות:</strong> {detail.exclusionReason || '—'}</Typography>
               {(() => {
                 const approved = normalizeExclusionApproved(detail.exclusionApproved)
@@ -1371,8 +1427,8 @@ export default function JobsPage() {
               {detail.followUpStatus ? (
                 <>
                   <Typography>
-                    <strong>פולואפ:</strong> {followUpStatusLabel(detail.followUpStatus)} · ניסיון{' '}
-                    {Math.max(0, Math.floor(Number(detail.followUp) || 0))}/2
+                    <strong>פולואפ:</strong> {followUpStatusLabel(detail.followUpStatus)} ·{' '}
+                    {isFollowUpSent(detail) ? 'נשלח' : 'לא נשלח'}
                     {isJobFollowUpDue(detail) ? ' · לטיפול עכשיו' : ''}
                   </Typography>
                   <Typography>
