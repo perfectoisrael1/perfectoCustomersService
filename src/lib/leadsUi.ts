@@ -27,6 +27,7 @@ export const LEADS_STATUS_OPTIONS: readonly string[] = [
   'אמ 3',
   'מעוניין מחכים לתשלום',
   'לא מעוניין דמי הקמה',
+  'נרשם באפליקציה',
 ]
 
 const STATUS_COLOR_ENTRIES: [string, { bg: string; fg: string }][] = [
@@ -41,6 +42,7 @@ const STATUS_COLOR_ENTRIES: [string, { bg: string; fg: string }][] = [
   ['אמ 3', { bg: '#64B5F6', fg: '#fff' }],
   ['מעוניין מחכים לתשלום', { bg: '#FF8A65', fg: '#fff' }],
   ['לא מעוניין דמי הקמה', { bg: '#E91E63', fg: '#fff' }],
+  ['נרשם באפליקציה', { bg: '#1565C0', fg: '#fff' }],
 ]
 
 export const LEADS_STATUS_COLORS: Record<string, { bg: string; fg: string }> = Object.fromEntries(
