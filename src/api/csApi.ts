@@ -69,6 +69,9 @@ export type Account = {
   acceptedTerms: boolean | null
   slug: string | null
   availability: string | null
+  availabilityOffUntil?: string | null
+  availabilityOffSince?: string | null
+  availabilitySelfOffBlocked?: boolean
   credits: number | null
   membershipPaid?: boolean | null
   hasSavedPaymentMethod?: boolean
@@ -560,6 +563,9 @@ export type AccountInput = Partial<{
   workingHours: string | null
   perfectoStatus: string | null
   availability: number | null
+  availabilityOffExtendDays?: number | null
+  availabilityOffPermanent?: boolean
+  availabilitySelfOffBlocked?: boolean
   credits: number | null
   payPerLead: number | null
   membershipPaid?: boolean
@@ -1288,6 +1294,8 @@ export async function patchMembershipFeeSettings(membershipFeeIls: number) {
 export type AppMaintenanceSettings = {
   enabled: boolean
   message: string
+  minRequiredVersion: string | null
+  forceUpdateMessage: string
   updatedAt: string | null
 }
 
@@ -1298,13 +1306,12 @@ export async function getAppMaintenanceSettings() {
 export async function patchAppMaintenanceSettings(body: {
   enabled?: boolean
   message?: string
+  minRequiredVersion?: string
+  forceUpdateMessage?: string
 }) {
-  return csFetch<{ enabled: boolean; message: string; updatedAt: string }>(
-    '/customer-service/settings/app-maintenance',
-    {
-      method: 'PATCH',
-      body,
-    },
-  )
+  return csFetch<AppMaintenanceSettings>('/customer-service/settings/app-maintenance', {
+    method: 'PATCH',
+    body,
+  })
 }
 

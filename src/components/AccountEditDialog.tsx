@@ -41,6 +41,7 @@ import {
   ACCOUNT_PHONE_EMPHASIS,
   AVAILABILITY_OPTIONS,
   availabilitySelectValue,
+  isPermanentAvailabilityOff,
   perfectoStatusForAvailability,
   accountFieldInputSx,
   accountStatusChipColors,
@@ -113,6 +114,23 @@ const Field = ({
   </Box>
 )
 
+function offStartedMoreThanWeekAgo(since: string | null | undefined): boolean {
+  if (!since) return false
+  const started = new Date(since)
+  if (Number.isNaN(started.getTime())) return false
+  return Date.now() - started.getTime() > 7 * 24 * 60 * 60 * 1000
+}
+
+function availabilityOffStatusText(account: Account | null): string {
+  if (!account) return ''
+  const availability = Number(account.availability)
+  const until = account.availabilityOffUntil
+  if (isPermanentAvailabilityOff(until)) return 'כבוי קבוע, בלי חזרה אוטומטית.'
+  if (availability === 2 && until) return `כבוי עד ${formatCsDateTime(until)}.`
+  if (availability === 2) return 'כבוי ידני.'
+  return 'אין כיבוי ידני פעיל.'
+}
+
 function buildServiceOptions(services: Service[]): string[] {
   const set = new Set<string>()
   for (const s of services) {
@@ -179,9 +197,13 @@ export default function AccountEditDialog({
   const [standingOrderLoading, setStandingOrderLoading] = useState(false)
   const [standingOrderError, setStandingOrderError] = useState<string | null>(null)
   const [standingOrderAction, setStandingOrderAction] = useState<StandingOrderAction | null>(null)
+  const [extendDaysInput, setExtendDaysInput] = useState('')
+  const [permanentOff, setPermanentOff] = useState(false)
 
   useEffect(() => {
     if (open) setTab('phone')
+    setExtendDaysInput('')
+    setPermanentOff(false)
   }, [open, existingAccount?.id])
 
   useEffect(() => {
@@ -553,11 +575,28 @@ export default function AccountEditDialog({
           onChange={(e) => {
             const v = e.target.value
             const availability = v === '' ? null : Number.parseInt(String(v), 10)
-            setForm((f) => ({
-              ...f,
-              availability,
-              perfectoStatus: perfectoStatusForAvailability(availability, f.perfectoStatus),
-            }))
+            if (availability !== 2) {
+              setExtendDaysInput('')
+              setPermanentOff(false)
+            }
+            setForm((f) => {
+              const next: AccountInput = {
+                ...f,
+                availability,
+                perfectoStatus: perfectoStatusForAvailability(availability, f.perfectoStatus),
+              }
+              if (availability !== 2) {
+                delete next.availabilityOffExtendDays
+                delete next.availabilityOffPermanent
+                if (
+                  Number(existingAccount?.availability) === 2 &&
+                  offStartedMoreThanWeekAgo(existingAccount?.availabilityOffSince)
+                ) {
+                  next.availabilitySelfOffBlocked = true
+                }
+              }
+              return next
+            })
           }}
           displayEmpty
           sx={{ ...accountFieldInputSx }}
@@ -573,7 +612,97 @@ export default function AccountEditDialog({
         </Select>
         <Typography sx={{ mt: 1, fontSize: 12, color: 'text.secondary', lineHeight: 1.45 }}>
           בחירה ב«זמין» / «לא זמין (כיבוי ידני)» נשמרת ולא נדרסת אוטומטית משעות העבודה.
+          מעבר לכיבוי ידני בלי הארכה נותן שבוע.
         </Typography>
+        {!isNew ? (
+          <Box sx={{ mt: 1.5 }}>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.5 }}>
+              {availabilityOffStatusText(existingAccount)}
+            </Typography>
+            <TextField
+              label="הארכת כיבוי בימים"
+              type="number"
+              size="small"
+              fullWidth
+              value={extendDaysInput}
+              disabled={saving || permanentOff}
+              onChange={(e) => {
+                const raw = e.target.value
+                setExtendDaysInput(raw)
+                setPermanentOff(false)
+                const days = Number.parseInt(raw, 10)
+                setForm((f) => {
+                  const next: AccountInput = { ...f }
+                  delete next.availabilityOffPermanent
+                  if (!raw.trim() || !Number.isInteger(days) || days < 1) {
+                    delete next.availabilityOffExtendDays
+                    return next
+                  }
+                  const availability = 2
+                  return {
+                    ...next,
+                    availability,
+                    availabilityOffExtendDays: Math.min(365, days),
+                    perfectoStatus: perfectoStatusForAvailability(availability, f.perfectoStatus),
+                  }
+                })
+              }}
+              slotProps={{ htmlInput: { min: 1, max: 365 } }}
+              helperText="נוסף לזמן שנשאר. אם הזמינות דולקת, מתחיל כיבוי למספר הימים."
+              sx={{ mt: 1.25 }}
+            />
+            <FormControlLabel
+              sx={{ m: 0, mt: 1, direction: 'rtl' }}
+              control={(
+                <Switch
+                  checked={permanentOff}
+                  disabled={saving}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setPermanentOff(checked)
+                    setExtendDaysInput('')
+                    setForm((f) => {
+                      const next: AccountInput = { ...f }
+                      delete next.availabilityOffExtendDays
+                      if (!checked) {
+                        delete next.availabilityOffPermanent
+                        return next
+                      }
+                      const availability = 2
+                      return {
+                        ...next,
+                        availability,
+                        availabilityOffPermanent: true,
+                        perfectoStatus: perfectoStatusForAvailability(availability, f.perfectoStatus),
+                      }
+                    })
+                  }}
+                />
+              )}
+              label="כיבוי קבוע"
+            />
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.45 }}>
+              נשאר כבוי עד ששירות הלקוחות מדליק אותו שוב.
+            </Typography>
+            <FormControlLabel
+              sx={{ m: 0, mt: 1, direction: 'rtl' }}
+              control={(
+                <Switch
+                  checked={form.availabilitySelfOffBlocked ?? existingAccount?.availabilitySelfOffBlocked === true}
+                  disabled={saving}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setForm((f) => ({ ...f, availabilitySelfOffBlocked: checked }))
+                  }}
+                />
+              )}
+              label="חסימת כיבוי עצמי"
+            />
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.45 }}>
+              כשדלוק, בעל המקצוע לא יכול לכבות זמינות לבד וצריך אישור מהתמיכה.
+            </Typography>
+          </Box>
+        ) : null}
       </Field>
       {!isNew ? (
         <Field label="דמי הקמה">

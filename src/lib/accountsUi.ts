@@ -20,6 +20,12 @@ export const AVAILABILITY_OPTIONS = [
   { value: '2', label: 'לא זמין (כיבוי ידני)' },
 ] as const
 
+export function isPermanentAvailabilityOff(until: string | null | undefined): boolean {
+  if (!until) return false
+  const year = Number(String(until).slice(0, 4))
+  return Number.isFinite(year) && year >= 2090
+}
+
 /** 1 = זמין לפי שעות, 3 = הפעלה ידנית (גם משירות לקוחות) */
 export function availabilitySelectValue(raw: number | null | undefined): string {
   if (raw == null || !Number.isFinite(Number(raw))) return ''

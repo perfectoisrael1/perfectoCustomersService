@@ -31,6 +31,8 @@ export default function AppMaintenanceSettingsTab() {
   )
   const [enabled, setEnabled] = useState(false)
   const [message, setMessage] = useState('')
+  const [minRequiredVersion, setMinRequiredVersion] = useState('')
+  const [forceUpdateMessage, setForceUpdateMessage] = useState('')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -39,6 +41,8 @@ export default function AppMaintenanceSettingsTab() {
       const data = await getAppMaintenanceSettings()
       setEnabled(data.enabled === true)
       setMessage(data.message ?? '')
+      setMinRequiredVersion(data.minRequiredVersion ?? '')
+      setForceUpdateMessage(data.forceUpdateMessage ?? '')
       setUpdatedAt(data.updatedAt ?? null)
     } catch (e) {
       setToast({
@@ -56,8 +60,18 @@ export default function AppMaintenanceSettingsTab() {
 
   const onSave = async () => {
     const trimmed = message.trim()
+    const version = minRequiredVersion.trim()
+    const updateMessage = forceUpdateMessage.trim()
     if (!trimmed) {
       setToast({ severity: 'error', message: 'יש להזין הודעה למשתמשים' })
+      return
+    }
+    if (version && !/^\d+(?:\.\d+){0,2}$/.test(version)) {
+      setToast({ severity: 'error', message: 'הגרסה צריכה להיראות כמו 2.2.4' })
+      return
+    }
+    if (!updateMessage) {
+      setToast({ severity: 'error', message: 'יש להזין הודעת עדכון' })
       return
     }
     setSaving(true)
@@ -65,15 +79,21 @@ export default function AppMaintenanceSettingsTab() {
       const data = await patchAppMaintenanceSettings({
         enabled,
         message: trimmed,
+        minRequiredVersion: version,
+        forceUpdateMessage: updateMessage,
       })
       setEnabled(data.enabled)
       setMessage(data.message)
+      setMinRequiredVersion(data.minRequiredVersion ?? '')
+      setForceUpdateMessage(data.forceUpdateMessage ?? '')
       setUpdatedAt(data.updatedAt ?? null)
       setToast({
         severity: 'success',
-        message: data.enabled
-          ? 'מצב שיפוצים הופעל — האפליקציה חסומה למשתמשים'
-          : 'מצב שיפוצים כובה — האפליקציה פתוחה',
+        message: data.minRequiredVersion
+          ? `נשמר. משתמשים מתחת לגרסה ${data.minRequiredVersion} חייבים לעדכן`
+          : data.enabled
+            ? 'מצב שיפוצים הופעל — האפליקציה חסומה למשתמשים'
+            : 'מצב שיפוצים כובה — האפליקציה פתוחה',
       })
     } catch (e) {
       setToast({
@@ -125,6 +145,33 @@ export default function AppMaintenanceSettingsTab() {
         minRows={3}
         slotProps={{ htmlInput: { maxLength: 255 } }}
         helperText={`${message.length}/255`}
+        sx={{ direction: 'rtl' }}
+      />
+
+      <Typography variant="subtitle1" sx={{ fontWeight: 700, textAlign: 'right', pt: 1 }}>
+        חובת עדכון גרסה
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'right' }}>
+        משתמשים עם גרסה נמוכה מהמספר שתכתוב כאן ייחסמו ויופנו להורדת האפליקציה. שדה ריק מבטל את החובה.
+      </Typography>
+      <TextField
+        label="גרסה נדרשת"
+        value={minRequiredVersion}
+        onChange={(e) => setMinRequiredVersion(e.target.value)}
+        disabled={!canEdit || saving}
+        placeholder="2.2.4"
+        helperText="לדוגמה 2.2.4 — גרסאות ישנות יותר לא יוכלו להמשיך"
+        sx={{ direction: 'rtl' }}
+      />
+      <TextField
+        label="הודעת עדכון"
+        value={forceUpdateMessage}
+        onChange={(e) => setForceUpdateMessage(e.target.value)}
+        disabled={!canEdit || saving}
+        multiline
+        minRows={2}
+        slotProps={{ htmlInput: { maxLength: 255 } }}
+        helperText={`${forceUpdateMessage.length}/255`}
         sx={{ direction: 'rtl' }}
       />
 
