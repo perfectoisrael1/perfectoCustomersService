@@ -248,7 +248,10 @@ function formatBroadcastSuccessMessage(res: {
   if (res.matchedAccounts <= 0) {
     return 'נוצרה פנייה ללא ספק (אין התאמות). ניתן לראות אותה בטאב «פניות ללא ספקים».'
   }
-  return `נוצרו ${res.createdJobs} פניות (${res.matchedAccounts} התאמות).`
+  if (res.matchedAccounts >= 2) {
+    return `ליד לא בלעדי — הפנייה נשלחה ל־${res.matchedAccounts} ספקים.`
+  }
+  return 'הפנייה נשלחה לספק אחד.'
 }
 
 const filterAutocompleteOptions = createFilterOptions<string>({
@@ -1389,6 +1392,15 @@ export default function JobsPage() {
               <Typography>
                 <strong>עיר:</strong> {detail.city || '—'}
               </Typography>
+              {detail.leadType || detail.chargedPrice != null ? (
+                <Typography>
+                  <strong>סוג ליד:</strong>{' '}
+                  {detail.leadType === 'shared' ? 'לא בלעדי (עד שני ספקים)' : 'בלעדי'}
+                  {detail.chargedPrice != null
+                    ? ` · נגבה ₪${Number(detail.chargedPrice).toLocaleString('he-IL')}`
+                    : ''}
+                </Typography>
+              ) : null}
               {detail.leadDomain ? (
                 <Typography variant="body2" color="text.secondary">
                   נשלח לרלוונטים (תחום לחיוב): {detail.leadDomain}
@@ -1563,6 +1575,14 @@ export default function JobsPage() {
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             {leavePreview ? (
               <>
+                {leavePreview.willAssign && leavePreview.leadType ? (
+                  <Chip
+                    size="small"
+                    label={leavePreview.leadType === 'shared' ? 'ליד לא בלעדי' : 'ליד בלעדי'}
+                    color={leavePreview.leadType === 'shared' ? 'info' : 'success'}
+                    sx={{ alignSelf: 'flex-start', fontWeight: 700 }}
+                  />
+                ) : null}
                 <Alert severity={leavePreview.willCharge ? 'warning' : 'info'}>
                   {leavePreview.summaryHe}
                 </Alert>

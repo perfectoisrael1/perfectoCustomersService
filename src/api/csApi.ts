@@ -26,6 +26,10 @@ export type Job = {
   description: string
   status: string
   statusLabel: string
+  /** exclusive = ספק אחד; shared = עד שני ספקים; null = פנייה ישנה / לא הוקצתה */
+  leadType?: 'exclusive' | 'shared' | null
+  /** הסכום שנגבה בפועל על הפנייה */
+  chargedPrice?: number | null
   exclusionReason: string
   /** NULL = טרם נקבע; true = אושר; false = לא אושר */
   exclusionApproved?: boolean | null
@@ -180,6 +184,7 @@ export type Service = {
   service: string
   subService?: string | null
   price?: number | null
+  nonExclusivePrice?: number | null
   slug?: string | null
   promotion?: boolean | null
 }
@@ -389,6 +394,9 @@ export type LeaveInquiryPreview = {
   leadPriceIls: number | null
   eligibleCount: number
   summaryHe: string
+  leadType?: 'exclusive' | 'shared' | null
+  sharedWithAccountId?: number | null
+  sharedWithAccountName?: string | null
 }
 
 /** תצוגה מקדימה ל«השארת פנייה» — האם תהיה הקצאה וחיוב */
@@ -531,10 +539,18 @@ export async function deleteAccountSavedCard(id: number) {
 
 export type StandingOrderStatus = 'none' | 'active' | 'frozen' | 'stopped'
 
+export type AccountSubscription = {
+  key: 'monthly' | 'legacy' | 'none' | 'basic' | 'starter' | 'ready'
+  label: string
+  amountIls: number | null
+  paidAt: string | null
+}
+
 export type StandingOrder = {
   status: StandingOrderStatus
   hkId: string | null
   columnReady: boolean
+  subscription?: AccountSubscription
 }
 
 export type StandingOrderAction = 'freeze' | 'stop' | 'delete' | 'resume'
@@ -874,6 +890,7 @@ export async function getServices() {
 
 export type ServicePatchInput = {
   price?: number
+  nonExclusivePrice?: number | null
   service?: string
   promotion?: boolean
 }
@@ -883,6 +900,7 @@ export type ServiceCreateInput = {
   service: string
   subService?: string | null
   price: number
+  nonExclusivePrice?: number | null
 }
 
 export async function createService(body: ServiceCreateInput) {
@@ -901,6 +919,10 @@ export async function patchService(id: number, body: ServicePatchInput) {
 
 export async function patchServicePrice(id: number, price: number) {
   return patchService(id, { price })
+}
+
+export async function patchServiceNonExclusivePrice(id: number, nonExclusivePrice: number | null) {
+  return patchService(id, { nonExclusivePrice })
 }
 
 export async function patchCategoryPromotion(category: string, promotion: boolean) {

@@ -836,6 +836,7 @@ export default function AccountEditDialog({
             : { bg: 'action.hover', fg: 'text.secondary' }
     const busy = standingOrderAction !== null
     const hasOrder = status === 'active' || status === 'frozen' || status === 'stopped'
+    const subscription = standingOrder?.subscription
 
     return (
       <Stack spacing={2}>
@@ -843,6 +844,29 @@ export default function AccountEditDialog({
           <Typography sx={{ color: 'error.main', fontSize: 14 }}>
             חסרה עמודת ההוראה במסד. יש להריץ את migrations/20261115-accounts-hyp-hk-id.sql
           </Typography>
+        ) : null}
+        {subscription ? (
+          <Field label="סוג מנוי" fullWidth>
+            <Chip
+              size="small"
+              label={
+                subscription.amountIls != null
+                  ? `${subscription.label} · ₪${subscription.amountIls.toLocaleString('he-IL')}`
+                  : subscription.label
+              }
+              sx={{
+                mt: 0.5,
+                fontWeight: 700,
+                bgcolor: subscription.key === 'none' ? 'action.hover' : '#FFF8D6',
+                color: subscription.key === 'none' ? 'text.secondary' : '#6B5200',
+              }}
+            />
+            {subscription.paidAt ? (
+              <Typography sx={{ mt: 1, fontSize: 13, color: 'text.secondary', lineHeight: 1.5 }}>
+                {`שולם לאחרונה: ${new Date(subscription.paidAt).toLocaleDateString('he-IL')}`}
+              </Typography>
+            ) : null}
+          </Field>
         ) : null}
         <Field label="סטטוס" fullWidth>
           <Chip

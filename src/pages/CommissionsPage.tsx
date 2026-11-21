@@ -26,7 +26,15 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { createService, getServices, patchCategoryPromotion, patchService, patchServicePrice, type Service } from '../api/csApi'
+import {
+  createService,
+  getServices,
+  patchCategoryPromotion,
+  patchService,
+  patchServiceNonExclusivePrice,
+  patchServicePrice,
+  type Service,
+} from '../api/csApi'
 import { useAuth } from '../context/useAuth'
 import { isManagerUser } from '../lib/roles'
 
@@ -39,6 +47,7 @@ type CommissionRow = {
   subService: string | null
   serviceName: string
   price: number | null
+  nonExclusivePrice: number | null
   promotion: boolean
   minimumCommission: string | null
   fixedCommissionAmount: string | null
@@ -65,6 +74,10 @@ function mapServiceToRows(services: Service[]): CommissionRow[] {
       subService,
       serviceName: buildServiceName(service, subService),
       price: r.price != null && Number.isFinite(Number(r.price)) ? Number(r.price) : null,
+      nonExclusivePrice:
+        r.nonExclusivePrice != null && Number.isFinite(Number(r.nonExclusivePrice))
+          ? Number(r.nonExclusivePrice)
+          : null,
       promotion: Boolean(r.promotion),
       minimumCommission: null,
       fixedCommissionAmount: null,
@@ -110,6 +123,9 @@ export default function CommissionsPage() {
   const [savingServiceIds, setSavingServiceIds] = useState<Set<number>>(() => new Set())
   const [savingPromotionCategories, setSavingPromotionCategories] = useState<Set<string>>(() => new Set())
   const [rowPriceErrors, setRowPriceErrors] = useState<Record<number, string>>({})
+  const [draftSharedPrices, setDraftSharedPrices] = useState<Record<number, string>>({})
+  const [savingSharedPriceIds, setSavingSharedPriceIds] = useState<Set<number>>(() => new Set())
+  const [rowSharedPriceErrors, setRowSharedPriceErrors] = useState<Record<number, string>>({})
   const [rowServiceErrors, setRowServiceErrors] = useState<Record<number, string>>({})
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
@@ -119,6 +135,7 @@ export default function CommissionsPage() {
   const [addService, setAddService] = useState('')
   const [addSubService, setAddSubService] = useState('')
   const [addPrice, setAddPrice] = useState('')
+  const [addSharedPrice, setAddSharedPrice] = useState('')
 
   const resetAddForm = () => {
     setAddCategory(null)
@@ -126,6 +143,7 @@ export default function CommissionsPage() {
     setAddService('')
     setAddSubService('')
     setAddPrice('')
+    setAddSharedPrice('')
     setAddFormError(null)
   }
 
@@ -147,8 +165,10 @@ export default function CommissionsPage() {
       const data = await getServices()
       setRows(mapServiceToRows(Array.isArray(data) ? data : []))
       setDraftPrices({})
+      setDraftSharedPrices({})
       setDraftServices({})
       setRowPriceErrors({})
+      setRowSharedPriceErrors({})
       setRowServiceErrors({})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת מחירון')
@@ -235,6 +255,67 @@ export default function CommissionsPage() {
       delete next[rowId]
       return next
     })
+  }
+
+  const getDraftSharedValue = (row: CommissionRow) =>
+    draftSharedPrices[row.id] ?? (row.nonExclusivePrice != null ? String(row.nonExclusivePrice) : '')
+
+  const setDraftSharedPriceValue = (rowId: number, value: string) => {
+    setDraftSharedPrices((prev) => ({ ...prev, [rowId]: value }))
+    setRowSharedPriceErrors((prev) => {
+      if (!prev[rowId]) return prev
+      const next = { ...prev }
+      delete next[rowId]
+      return next
+    })
+  }
+
+  const saveSharedPrice = async (row: CommissionRow) => {
+    const raw = getDraftSharedValue(row)
+    const parsed = parsePriceInput(raw)
+    if (raw.trim() && parsed == null) {
+      setRowSharedPriceErrors((prev) => ({ ...prev, [row.id]: 'יש להזין מחיר תקין' }))
+      return
+    }
+    if (parsed === row.nonExclusivePrice) {
+      setDraftSharedPrices((prev) => {
+        const next = { ...prev }
+        delete next[row.id]
+        return next
+      })
+      return
+    }
+
+    setSavingSharedPriceIds((prev) => new Set(prev).add(row.id))
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const updated = await patchServiceNonExclusivePrice(row.id, parsed)
+      const nextPrice =
+        updated.nonExclusivePrice != null && Number.isFinite(Number(updated.nonExclusivePrice))
+          ? Number(updated.nonExclusivePrice)
+          : null
+      setRows((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, nonExclusivePrice: nextPrice } : r)),
+      )
+      setDraftSharedPrices((prev) => {
+        const next = { ...prev }
+        delete next[row.id]
+        return next
+      })
+      setSuccessMessage('המחיר לליד לא בלעדי עודכן')
+    } catch (err) {
+      setRowSharedPriceErrors((prev) => ({
+        ...prev,
+        [row.id]: err instanceof Error ? err.message : 'שגיאה בשמירת מחיר',
+      }))
+    } finally {
+      setSavingSharedPriceIds((prev) => {
+        const next = new Set(prev)
+        next.delete(row.id)
+        return next
+      })
+    }
   }
 
   const getDraftService = (row: CommissionRow) =>
@@ -379,6 +460,7 @@ export default function CommissionsPage() {
     const service = addService.replace(/\s+/g, ' ').trim()
     const subService = addSubService.replace(/\s+/g, ' ').trim()
     const price = parsePriceInput(addPrice)
+    const nonExclusivePrice = parsePriceInput(addSharedPrice)
 
     if (!category) {
       setAddFormError('יש לבחור או להזין קטגוריה')
@@ -392,6 +474,10 @@ export default function CommissionsPage() {
       setAddFormError('יש להזין מחיר תקין')
       return
     }
+    if (addSharedPrice.trim() && nonExclusivePrice == null) {
+      setAddFormError('יש להזין מחיר תקין לליד לא בלעדי')
+      return
+    }
 
     setAddSaving(true)
     setAddFormError(null)
@@ -403,6 +489,7 @@ export default function CommissionsPage() {
         service,
         subService: subService || null,
         price,
+        nonExclusivePrice,
       })
       const nextRow = mapServiceToRows([created])[0]
       setRows((prev) => [...prev, nextRow])
@@ -515,6 +602,7 @@ export default function CommissionsPage() {
                     <TableCell align="right" sx={{ fontWeight: 800 }}>שם הקטגוריה</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 800 }}>תחום</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 800 }}>מחיר / עמלה</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>מחיר לליד לא בלעדי</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 800 }}>עמלת מינימום</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 800 }}>סכום קבוע</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 800 }}>יש ממומן</TableCell>
@@ -538,6 +626,11 @@ export default function CommissionsPage() {
                         onToggle={() => toggleCategory(categoryName)}
                         getDraftPrice={getDraftValue}
                         setDraftPrice={setDraftPriceValue}
+                        getDraftSharedPrice={getDraftSharedValue}
+                        setDraftSharedPrice={setDraftSharedPriceValue}
+                        onSaveSharedPrice={saveSharedPrice}
+                        savingSharedPriceIds={savingSharedPriceIds}
+                        rowSharedPriceErrors={rowSharedPriceErrors}
                         getDraftService={getDraftService}
                         setDraftService={setDraftServiceValue}
                         onSavePrice={savePrice}
@@ -611,6 +704,18 @@ export default function CommissionsPage() {
               onChange={(e) => setAddPrice(e.target.value)}
               fullWidth
               required
+              sx={COMMISSION_EDITOR_RTL_FIELD_SX}
+              slotProps={{
+                htmlInput: { min: 0, step: 1, dir: 'ltr', style: { textAlign: 'right' } },
+              }}
+            />
+          </CommissionField>
+          <CommissionField label="מחיר לליד לא בלעדי (₪, אופציונלי)">
+            <TextField
+              type="number"
+              value={addSharedPrice}
+              onChange={(e) => setAddSharedPrice(e.target.value)}
+              fullWidth
               sx={COMMISSION_EDITOR_RTL_FIELD_SX}
               slotProps={{
                 htmlInput: { min: 0, step: 1, dir: 'ltr', style: { textAlign: 'right' } },
@@ -714,7 +819,8 @@ function EditableServiceCell({
 }
 
 function EditablePriceCell({
-  row,
+  value,
+  allowEmpty,
   rowBg,
   draftValue,
   saving,
@@ -723,7 +829,8 @@ function EditablePriceCell({
   onDraftChange,
   onSave,
 }: {
-  row: CommissionRow
+  value: number | null
+  allowEmpty?: boolean
   rowBg: string
   draftValue: string
   saving: boolean
@@ -732,10 +839,10 @@ function EditablePriceCell({
   onDraftChange: (value: string) => void
   onSave: () => void
 }) {
-  if (readOnly || row.price == null) {
+  if (readOnly || (value == null && !allowEmpty)) {
     return (
       <TableCell align="right" sx={{ backgroundColor: rowBg }}>
-        {readOnly ? formatPrice(row.price) : '—'}
+        {readOnly ? formatPrice(value) : '—'}
       </TableCell>
     )
   }
@@ -797,6 +904,11 @@ function FragmentRows({
   onToggle,
   getDraftPrice,
   setDraftPrice,
+  getDraftSharedPrice,
+  setDraftSharedPrice,
+  onSaveSharedPrice,
+  savingSharedPriceIds,
+  rowSharedPriceErrors,
   getDraftService,
   setDraftService,
   onSavePrice,
@@ -819,6 +931,11 @@ function FragmentRows({
   onToggle: () => void
   getDraftPrice: (row: CommissionRow) => string
   setDraftPrice: (rowId: number, value: string) => void
+  getDraftSharedPrice: (row: CommissionRow) => string
+  setDraftSharedPrice: (rowId: number, value: string) => void
+  onSaveSharedPrice: (row: CommissionRow) => void | Promise<void>
+  savingSharedPriceIds: Set<number>
+  rowSharedPriceErrors: Record<number, string>
   getDraftService: (row: CommissionRow) => string
   setDraftService: (rowId: number, value: string) => void
   onSavePrice: (row: CommissionRow) => void | Promise<void>
@@ -856,6 +973,7 @@ function FragmentRows({
         </TableCell>
         <TableCell align="right">({items.length} תחומים)</TableCell>
         <TableCell align="right">{formatPrice(items[0]?.price ?? null)}</TableCell>
+        <TableCell align="right">{formatPrice(items[0]?.nonExclusivePrice ?? null)}</TableCell>
         <TableCell align="right">{items[0]?.minimumCommission != null ? `${items[0].minimumCommission} ₪` : '—'}</TableCell>
         <TableCell align="right">{items[0]?.fixedCommissionAmount ?? '—'}</TableCell>
         <TableCell align="center" sx={{ width: 72 }}>
@@ -895,7 +1013,7 @@ function FragmentRows({
                 onSave={() => void onSaveService(r)}
               />
               <EditablePriceCell
-                row={r}
+                value={r.price}
                 rowBg={rowBg}
                 draftValue={getDraftPrice(r)}
                 saving={savingPriceIds.has(r.id)}
@@ -903,6 +1021,17 @@ function FragmentRows({
                 readOnly={readOnly}
                 onDraftChange={(value) => setDraftPrice(r.id, value)}
                 onSave={() => void onSavePrice(r)}
+              />
+              <EditablePriceCell
+                value={r.nonExclusivePrice}
+                allowEmpty
+                rowBg={rowBg}
+                draftValue={getDraftSharedPrice(r)}
+                saving={savingSharedPriceIds.has(r.id)}
+                errorText={rowSharedPriceErrors[r.id]}
+                readOnly={readOnly}
+                onDraftChange={(value) => setDraftSharedPrice(r.id, value)}
+                onSave={() => void onSaveSharedPrice(r)}
               />
               <TableCell align="right" sx={{ backgroundColor: rowBg }}>{r.minimumCommission != null ? `${r.minimumCommission} ₪` : '—'}</TableCell>
               <TableCell align="right" sx={{ backgroundColor: rowBg }}>{r.fixedCommissionAmount ?? '—'}</TableCell>
