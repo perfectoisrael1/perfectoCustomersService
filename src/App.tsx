@@ -114,6 +114,15 @@ export default function App() {
                     </ManagerProtectedRoute>
                   )}
                 />
+                <Route path="/jobs/exceptions" element={<Navigate to="/exclusions" replace />} />
+                <Route
+                  path="/exclusions"
+                  element={(
+                    <ManagerProtectedRoute>
+                      <JobsPage exclusionsOnly />
+                    </ManagerProtectedRoute>
+                  )}
+                />
                 <Route path="/accounts" element={<Navigate to="/accounts/businesses" replace />} />
                 <Route path="/accounts/:segment" element={<AccountsPage />} />
                 <Route path="/leads" element={<LeadsPage />} />

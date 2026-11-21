@@ -305,6 +305,18 @@ export async function getJobs() {
   return csFetch<Job[]>('/customer-service/jobs')
 }
 
+export async function getPendingExclusionsCount(): Promise<{ count: number }> {
+  try {
+    return await csFetch<{ count: number }>('/customer-service/jobs/pending-exclusions-count')
+  } catch {
+    const { isPendingExclusionRow } = await import('../lib/pendingExclusions')
+    const jobs = await getJobs()
+    return { count: jobs.filter(isPendingExclusionRow).length }
+  }
+}
+
+export const PENDING_EXCLUSIONS_CHANGED_EVENT = 'cs:pending-exclusions-changed'
+
 export async function getPpcJobCount() {
   return csFetch<{ count: number }>('/customer-service/jobs/ppc-count')
 }
@@ -1198,7 +1210,18 @@ export type Conversation = {
   lastMessageAt: string | null
   unreadCount: number
   unreadFromAccount: number
+  /** ההודעה האחרונה מהספק ועוד לא נענתה (חסר בבקאנד ישן) */
+  awaitingReply?: boolean
 }
+
+/** שיחה שדורשת טיפול: פתוחה, או בטיפול כשהספק שלח הודעה שטרם נענתה */
+export function conversationNeedsAttention(c: Conversation): boolean {
+  if (c.status === 'open') return true
+  if (c.status !== 'in_progress') return false
+  return c.awaitingReply ?? c.unreadFromAccount > 0
+}
+
+export const CONVERSATIONS_CHANGED_EVENT = 'cs:conversations-changed'
 
 export type ConversationMessage = {
   id: number

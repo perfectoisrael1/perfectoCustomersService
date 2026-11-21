@@ -26,6 +26,8 @@ import {
 import CloseIcon from '@mui/icons-material/Close'
 import {
   closeConversation,
+  CONVERSATIONS_CHANGED_EVENT,
+  conversationNeedsAttention,
   getConversationMessages,
   getConversations,
   sendConversationAgentMessage,
@@ -90,6 +92,18 @@ export default function ConversationsPage() {
   const [rows, setRows] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return rows
+    const digits = q.replace(/\D/g, '')
+    return rows.filter((r) => {
+      const name = String(r.accountName || '').toLowerCase()
+      const phone = String(r.accountPhone || '').replace(/\D/g, '')
+      return name.includes(q) || (digits.length > 0 && phone.includes(digits))
+    })
+  }, [rows, query])
 
   const [chatOpen, setChatOpen] = useState(false)
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
@@ -116,6 +130,7 @@ export default function ConversationsPage() {
     try {
       const res = await getConversations(statusFilter ? { status: statusFilter } : undefined)
       setRows(Array.isArray(res.items) ? res.items : [])
+      window.dispatchEvent(new Event(CONVERSATIONS_CHANGED_EVENT))
     } catch (e) {
       if (!silent) {
         setRows([])
@@ -243,16 +258,30 @@ export default function ConversationsPage() {
   return (
     <Box sx={{ minHeight: CS_PAGE_FILL_MIN_HEIGHT_CSS }}>
       <Box sx={{ position: 'sticky', top: STICKY_INNER_NAV_TOP_IN_MAIN_SCROLL_CSS, zIndex: 2, bgcolor: '#fafafa', pb: `${GAP_BELOW_INNER_NAV_PX}px` }}>
-        <Tabs
-          value={tab}
-          onChange={(_, value: StatusTab) => setSearchParams({ tab: value })}
-          variant="scrollable"
-          scrollButtons="auto"
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}
         >
-          {STATUS_TABS.map((t) => (
-            <Tab key={t.value} value={t.value} label={t.label} />
-          ))}
-        </Tabs>
+          <Tabs
+            value={tab}
+            onChange={(_, value: StatusTab) => setSearchParams({ tab: value })}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ flex: '1 1 auto', minWidth: 0 }}
+          >
+            {STATUS_TABS.map((t) => (
+              <Tab key={t.value} value={t.value} label={t.label} />
+            ))}
+          </Tabs>
+          <TextField
+            size="small"
+            placeholder="חיפוש לפי שם או טלפון"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ width: { xs: '100%', sm: 260 }, bgcolor: '#fff' }}
+            slotProps={{ htmlInput: { 'aria-label': 'חיפוש שיחות לפי שם או טלפון' } }}
+          />
+        </Stack>
       </Box>
 
       <Card>
@@ -280,20 +309,23 @@ export default function ConversationsPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {rows.length === 0 ? (
+                  {filteredRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} align="center">
-                        אין שיחות
+                        {rows.length > 0 && query.trim() ? 'לא נמצאו שיחות התואמות לחיפוש' : 'אין שיחות'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((row) => (
+                    filteredRows.map((row) => (
                       <TableRow key={row.id} hover sx={{ cursor: 'pointer' }} onClick={() => void openChat(row)}>
                         <TableCell>{row.id}</TableCell>
                         <TableCell>{row.accountName || '—'}</TableCell>
                         <TableCell>{row.accountPhone || '—'}</TableCell>
                         <TableCell>
                           <Chip size="small" label={statusLabel(row.status)} color={statusColor(row.status)} />
+                          {row.status === 'in_progress' && conversationNeedsAttention(row) ? (
+                            <Chip size="small" color="error" variant="outlined" label="ממתין למענה" sx={{ ml: 1 }} />
+                          ) : null}
                           {row.unreadFromAccount > 0 ? (
                             <Chip size="small" color="error" label={row.unreadFromAccount} sx={{ ml: 1 }} />
                           ) : null}

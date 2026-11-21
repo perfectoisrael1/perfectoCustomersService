@@ -22,7 +22,13 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAuth } from '../context/useAuth'
-import { getConversations } from '../api/csApi'
+import {
+  CONVERSATIONS_CHANGED_EVENT,
+  conversationNeedsAttention,
+  getConversations,
+  getPendingExclusionsCount,
+  PENDING_EXCLUSIONS_CHANGED_EVENT,
+} from '../api/csApi'
 import { CSS_VAR_APP_BAR_HEIGHT_PX, MAIN_PADDING_TOP_CSS } from '../layout/headerLayout'
 import { isManagerOnlyRoute, isManagerUser } from '../lib/roles'
 
@@ -42,6 +48,7 @@ function pathMatches(pathname: string, to: string): boolean {
 const mainLinks: NavLink[] = [
   { to: '/personal-area', prefix: '/personal-area', label: 'אזור אישי' },
   { to: '/jobs/today', prefix: '/jobs', label: 'פניות מלקוחות' },
+  { to: '/exclusions', prefix: '/exclusions', label: 'החרגות' },
   { to: '/accounts/businesses', prefix: '/accounts', label: 'ספקים' },
   { to: '/leads', prefix: '/leads', label: 'לידים' },
   { to: '/payment-attempts', prefix: '/payment-attempts', label: 'תשלומים' },
@@ -250,12 +257,12 @@ function NavList({
   items,
   pathname,
   onNavigate,
-  openConversationsCount = 0,
+  badgeCounts = {},
 }: {
   items: NavLink[]
   pathname: string
   onNavigate: () => void
-  openConversationsCount?: number
+  badgeCounts?: Record<string, number>
 }) {
   return (
     <List disablePadding>
@@ -271,7 +278,8 @@ function NavList({
           )
         }
         const selected = pathname === l.prefix || pathname.startsWith(`${l.prefix}/`)
-        const showOpenCount = l.prefix === '/conversations' && openConversationsCount > 0
+        const badgeCount = badgeCounts[l.prefix] ?? 0
+        const showOpenCount = badgeCount > 0
         return (
           <ListItemButton
             key={l.prefix}
@@ -297,7 +305,7 @@ function NavList({
                       {l.label}
                     </Box>
                     <Box component="span" sx={{ color: 'error.main', fontWeight: 800, flexShrink: 0 }}>
-                      {openConversationsCount}
+                      {badgeCount}
                     </Box>
                   </Box>
                 ) : (
@@ -318,6 +326,7 @@ export default function AppLayout() {
   const appBarRef = useRef<HTMLDivElement>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openConversationsCount, setOpenConversationsCount] = useState(0)
+  const [pendingExclusionsCount, setPendingExclusionsCount] = useState(0)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -333,8 +342,12 @@ export default function AppLayout() {
 
     const loadOpenCount = async () => {
       try {
-        const { items } = await getConversations({ status: 'open' })
-        if (!cancelled) setOpenConversationsCount(items?.length ?? 0)
+        const [open, inProgress] = await Promise.all([
+          getConversations({ status: 'open' }),
+          getConversations({ status: 'in_progress' }),
+        ])
+        const items = [...(open.items ?? []), ...(inProgress.items ?? [])]
+        if (!cancelled) setOpenConversationsCount(items.filter(conversationNeedsAttention).length)
       } catch {
         if (!cancelled) setOpenConversationsCount(0)
       }
@@ -342,11 +355,45 @@ export default function AppLayout() {
 
     void loadOpenCount()
     const intervalId = setInterval(loadOpenCount, 30_000)
+    window.addEventListener(CONVERSATIONS_CHANGED_EVENT, loadOpenCount)
     return () => {
       cancelled = true
       clearInterval(intervalId)
+      window.removeEventListener(CONVERSATIONS_CHANGED_EVENT, loadOpenCount)
     }
   }, [user, isManager, location.pathname])
+
+  useEffect(() => {
+    if (!user || !isManager) return
+
+    let cancelled = false
+
+    const loadPendingExclusions = async () => {
+      try {
+        const { count } = await getPendingExclusionsCount()
+        if (!cancelled) setPendingExclusionsCount(Number(count) || 0)
+      } catch {
+        if (!cancelled) setPendingExclusionsCount(0)
+      }
+    }
+
+    void loadPendingExclusions()
+    const intervalId = setInterval(loadPendingExclusions, 30_000)
+    window.addEventListener(PENDING_EXCLUSIONS_CHANGED_EVENT, loadPendingExclusions)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+      window.removeEventListener(PENDING_EXCLUSIONS_CHANGED_EVENT, loadPendingExclusions)
+    }
+  }, [user, isManager, location.pathname])
+
+  const badgeCounts = useMemo(
+    () => ({
+      '/conversations': openConversationsCount,
+      '/exclusions': user && isManager ? pendingExclusionsCount : 0,
+    }),
+    [openConversationsCount, pendingExclusionsCount, user, isManager],
+  )
 
   const visibleMainLinks = useMemo(() => filterNavLinks(mainLinks, isManager), [isManager])
   const visibleBottomLinks = useMemo(() => filterNavLinks(bottomLinks, isManager), [isManager])
@@ -410,7 +457,7 @@ export default function AppLayout() {
           items={visibleMainLinks}
           pathname={location.pathname}
           onNavigate={closeMobileDrawer}
-          openConversationsCount={openConversationsCount}
+          badgeCounts={badgeCounts}
         />
       </Box>
       <Divider />

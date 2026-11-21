@@ -35,6 +35,7 @@ export function isSuperAdminRole(role: string | null | undefined): boolean {
 
 export const MANAGER_ONLY_ROUTE_PREFIXES = [
   '/jobs',
+  '/exclusions',
   '/payment-attempts',
   '/tasks',
   '/company-employees',

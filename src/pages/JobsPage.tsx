@@ -39,6 +39,7 @@ import {
 } from '../lib/caliberUi'
 import {
   approveJobExclusion,
+  PENDING_EXCLUSIONS_CHANGED_EVENT,
   broadcastInquiryByDomainAndCity,
   deleteJob,
   getCities,
@@ -54,6 +55,7 @@ import {
 } from '../api/csApi'
 import CsDialogTitleWithMenu from '../components/CsDialogTitleWithMenu'
 import CsTablePaginationFooter from '../components/CsTablePaginationFooter'
+import { isPendingExclusionRow, normalizeExclusionApproved } from '../lib/pendingExclusions'
 import CsTableContainer from '../components/CsStandardTable'
 import {
   CsTableRowCheckboxCell,
@@ -180,7 +182,6 @@ function jobSortValue(row: Job, col: JobsSortColumn): string {
 
 const VALID_SEGMENTS: JobsTab[] = [
   'today',
-  'exceptions',
   'unassigned',
   'follow-up',
   'search',
@@ -194,23 +195,6 @@ function segmentToTab(segment: string | undefined): JobsTab {
 
 function tabToPath(tab: JobsTab): string {
   return `/jobs/${tab}`
-}
-
-function normalizeExclusionApproved(
-  value: boolean | number | string | null | undefined,
-): boolean | null {
-  if (value === true || value === 1 || value === '1') return true
-  if (value === false || value === 0 || value === '0') return false
-  return null
-}
-
-/** החרגה שעדיין לא טופלה במשרד */
-function isPendingExclusion(job: Pick<Job, 'exclusionReason' | 'exclusionApproved'>): boolean {
-  const e = String(job.exclusionReason || '').trim()
-  if (!e || e === 'ללא החרגות') return false
-  const approved = normalizeExclusionApproved(job.exclusionApproved)
-  if (approved === true || approved === false) return false
-  return !e.startsWith('מאושר החרגה')
 }
 
 /** תבנית ברירת־מחדל מהוובהוק: `… תחום: X. עיר: Y.` */
@@ -326,24 +310,18 @@ const autocompleteTextFieldSx = {
 
 function filterJobsForTab(all: Job[], tab: JobsTab): Job[] {
   if (tab === 'today') return all.filter((r) => isCreatedTodayJerusalem(r.created))
-  if (tab === 'exceptions') {
-    return all.filter((r) => {
-      // כל פנייה עם החרגה ממתינה (לא מוגבל ל«שליחויות» — בפרפקטו התחום הוא לרוב שם מקצוע/שירות)
-      const status = String(r.statusLabel || '').trim()
-      return status !== 'לא נספר' && isPendingExclusion(r)
-    })
-  }
+  if (tab === 'exceptions') return all.filter(isPendingExclusionRow)
   if (tab === 'unassigned') return all.filter(isUnassignedJob)
   if (tab === 'follow-up') return all.filter(isJobFollowUpPipeline)
   return all
 }
 
-export default function JobsPage() {
+export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: boolean }) {
   const theme = useTheme()
   const { segment } = useParams<{ segment: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-  const tab = segmentToTab(segment)
+  const tab: JobsTab = exclusionsOnly ? 'exceptions' : segmentToTab(segment)
 
   const [allJobs, setAllJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
@@ -433,11 +411,12 @@ export default function JobsPage() {
   )
 
   useEffect(() => {
+    if (exclusionsOnly) return
     const s = String(segment || '').trim()
     if (s && !VALID_SEGMENTS.includes(s as JobsTab)) {
       navigate('/jobs/today', { replace: true })
     }
-  }, [segment, navigate])
+  }, [segment, navigate, exclusionsOnly])
 
   useEffect(() => {
     if (tab === 'follow-up') {
@@ -511,6 +490,7 @@ export default function JobsPage() {
       } else {
         await rejectJobExclusion(job.id, trimmedNote)
       }
+      window.dispatchEvent(new Event(PENDING_EXCLUSIONS_CHANGED_EVENT))
       await load({ silent: true })
       setDetail((d) => (d?.id === job.id ? null : d))
       setExclusionDecisionDraft(null)
@@ -786,6 +766,14 @@ export default function JobsPage() {
                   width: '100%',
                 }}
               >
+                {exclusionsOnly ? (
+                  <Typography
+                    component="h2"
+                    sx={{ flex: '1 1 auto', fontWeight: 800, fontSize: 16, py: 1.5 }}
+                  >
+                    {`החרגות שטרם טופלו (${counts.exceptions})`}
+                  </Typography>
+                ) : (
                 <Tabs
                   value={tab}
                   onChange={(_e, v) => setTab(v as JobsTab)}
@@ -800,7 +788,6 @@ export default function JobsPage() {
                   }}
                 >
                   <Tab value="today" label={`פניות היום (${counts.today})`} />
-                  <Tab value="exceptions" label={`החרגות (${counts.exceptions})`} />
                   <Tab value="unassigned" label={`פניות ללא ספקים (${counts.unassigned})`} />
                   <Tab
                     value="follow-up"
@@ -813,6 +800,7 @@ export default function JobsPage() {
                   <Tab value="search" label={`כל הפניות (${counts.search})`} />
                   <Tab value="leave" label="השארת פנייה" />
                 </Tabs>
+                )}
 
                 {tab === 'leave' ? null : (
                   <Box
