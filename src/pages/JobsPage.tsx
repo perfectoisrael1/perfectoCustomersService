@@ -515,16 +515,8 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
     setError(null)
     setSuccessMessage(null)
     try {
-      const res = await transferJobToCalliber(job.id)
-      if (res.forHandling) {
-        setSuccessMessage('הפנייה הועברה לקליבר ולא נמצא לה ספק מתאים, אז היא נכנסה לפניות לטיפול.')
-      } else {
-        setSuccessMessage(
-          res.matchedAccounts > 1
-            ? `הפנייה הועברה לקליבר לפי התור, ל־${res.matchedAccounts} בעלי מקצוע.`
-            : 'הפנייה הועברה לקליבר לפי התור.',
-        )
-      }
+      await transferJobToCalliber(job.id)
+      setSuccessMessage('הפנייה הועברה לקליבר וממתינה לטיפול.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בהעברה לקליבר')
     } finally {
