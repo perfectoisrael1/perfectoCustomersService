@@ -41,6 +41,7 @@ import {
   approveJobExclusion,
   PENDING_EXCLUSIONS_CHANGED_EVENT,
   broadcastInquiryByDomainAndCity,
+  transferJobToCalliber,
   deleteJob,
   getCities,
   getJobs,
@@ -341,6 +342,7 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
     city: string
   } | null>(null)
   const [broadcastingId, setBroadcastingId] = useState<number | null>(null)
+  const [transferringToCalliberId, setTransferringToCalliberId] = useState<number | null>(null)
   const [followUpBusyId, setFollowUpBusyId] = useState<number | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [detailDeleting, setDetailDeleting] = useState(false)
@@ -507,6 +509,28 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
       setExceptionsBusyJobId(null)
     }
   }, [exclusionDecisionDraft, load])
+
+  const transferToCalliber = useCallback(async (job: Job) => {
+    setTransferringToCalliberId(job.id)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      const res = await transferJobToCalliber(job.id)
+      if (res.forHandling) {
+        setSuccessMessage('הפנייה הועברה לקליבר ולא נמצא לה ספק מתאים, אז היא נכנסה לפניות לטיפול.')
+      } else {
+        setSuccessMessage(
+          res.matchedAccounts > 1
+            ? `הפנייה הועברה לקליבר לפי התור, ל־${res.matchedAccounts} בעלי מקצוע.`
+            : 'הפנייה הועברה לקליבר לפי התור.',
+        )
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שגיאה בהעברה לקליבר')
+    } finally {
+      setTransferringToCalliberId(null)
+    }
+  }, [])
 
   const openBroadcastDialog = useCallback((job: Job) => {
     const parsed = parseDomainCityFromDescription(job.description)
@@ -1297,7 +1321,26 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
                                     לא מאשר
                                   </Button>
                                 </>
-                              ) : showBroadcastToAccountsButton(row, tab) ? (
+                              ) : (
+                                <>
+                                  {isUnassignedJob(row) ? (
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      disabled={transferringToCalliberId === row.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        void transferToCalliber(row)
+                                      }}
+                                    >
+                                      {transferringToCalliberId === row.id ? (
+                                        <CircularProgress size={18} color="inherit" />
+                                      ) : (
+                                        'העבר לקליבר'
+                                      )}
+                                    </Button>
+                                  ) : null}
+                                  {showBroadcastToAccountsButton(row, tab) ? (
                                 <Button
                                   size="small"
                                   variant="outlined"
@@ -1309,7 +1352,9 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
                                 >
                                   {tab === 'unassigned' ? 'שידור לרלוונטים' : 'יצירת פניות'}
                                 </Button>
-                              ) : null}
+                                  ) : null}
+                                </>
+                              )}
                             </Stack>
                           </TableCell>
                         </TableRow>

@@ -422,6 +422,15 @@ export async function previewLeaveInquiry(body: { domain: string; city: string }
   })
 }
 
+/** מעביר פנייה ללא ספק למסלול הטופס של קליבר, משויכת לסוכנות פרפקטו */
+export async function transferJobToCalliber(jobId: number) {
+  return csFetch<{
+    matchedAccounts: number
+    createdJobs: number
+    forHandling: boolean
+  }>(`/customer-service/jobs/${jobId}/transfer-to-calliber`, { method: 'POST' })
+}
+
 /** וובהוק ציבורי: יוצר פניות לבעל מקצוע אחד (תור + חיוב) */
 export async function broadcastInquiryByDomainAndCity(body: {
   domain: string
