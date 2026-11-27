@@ -1283,19 +1283,21 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
                                 flexWrap: 'wrap',
                               }}
                             >
-                              <Button
-                                size="small"
-                                variant="contained"
-                                disabled={followUpBusyId === row.id || isFollowUpSent(row)}
-                                title={isFollowUpSent(row) ? 'פולואפ כבר נשלח' : 'שליחת פולואפ'}
-                                onClick={(e) => void sendFollowUp(row, e)}
-                              >
-                                {followUpBusyId === row.id ? (
-                                  <CircularProgress size={18} color="inherit" />
-                                ) : (
-                                  'פולואפ'
-                                )}
-                              </Button>
+                              {tab === 'exceptions' || !isUnassignedJob(row) ? (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  disabled={followUpBusyId === row.id || isFollowUpSent(row)}
+                                  title={isFollowUpSent(row) ? 'פולואפ כבר נשלח' : 'שליחת פולואפ'}
+                                  onClick={(e) => void sendFollowUp(row, e)}
+                                >
+                                  {followUpBusyId === row.id ? (
+                                    <CircularProgress size={18} color="inherit" />
+                                  ) : (
+                                    'פולואפ'
+                                  )}
+                                </Button>
+                              ) : null}
                               {tab === 'exceptions' ? (
                                 <>
                                   <Button
@@ -1331,6 +1333,10 @@ export default function JobsPage({ exclusionsOnly = false }: { exclusionsOnly?: 
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         void transferToCalliber(row)
+                                      }}
+                                      sx={{
+                                        bgcolor: '#3993A0',
+                                        '&:hover': { bgcolor: '#2f7d88' },
                                       }}
                                     >
                                       {transferringToCalliberId === row.id ? (
